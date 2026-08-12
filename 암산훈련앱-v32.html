@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#2A1608">
 <meta name="mobile-web-app-capable" content="yes">
 <title>암산훈련앱 v31</title>
 <style>
@@ -889,9 +893,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bp);
 /* ── 패턴③ 넘버본드(전체-부분 원 다이어그램) ── */
 .comp10-bond text{font-family:'Noto Serif KR',serif;font-weight:700;}
 </style>
+<!-- ── 접근 코드 검증(게이트) 관련: MVP 배포용, 신규 추가 ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="access-gate.js"></script>
 </head>
 <body>
 <div id="app">
+<!-- ── 접근 코드 확인 중/차단 오버레이: 신규 추가, 기존 화면 위에 얹힘 ── -->
+<div id="gate-overlay" style="position:fixed;inset:0;z-index:99999;background:var(--bp);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  color:var(--fa);font-family:'Noto Sans KR',sans-serif;text-align:center;padding:24px;">
+  <div id="gate-overlay-msg" style="font-size:18px;line-height:1.7;">확인 중...</div>
+</div>
 <div id="speed-countdown"></div>
 
 <div id="scr-sel" class="screen">
@@ -10879,8 +10892,17 @@ function speedShare(){
 
 /* ════ INIT ════ */
 layoutSelect();
-showScreen('scr-sel');
-setTimeout(()=>{_appReady=true;},300); // 초기화 완료 후 resize 허용
+gateBoot(
+  function(state){ // 통과: 기존 동작 그대로
+    const ov=document.getElementById('gate-overlay'); if(ov) ov.style.display='none';
+    showScreen('scr-sel');
+    setTimeout(()=>{_appReady=true;},300); // 초기화 완료 후 resize 허용
+  },
+  function(state){ // 차단: 오버레이에 안내문구만 표시, 기존 화면은 노출 안 함
+    const msgEl=document.getElementById('gate-overlay-msg');
+    if(msgEl) msgEl.innerHTML=(typeof gateBlockedMessage==='function') ? gateBlockedMessage(state) : '접속할 수 없습니다.<br>학원으로 문의해주세요.';
+  }
+);
 </script>
 <script>
 /* ── mult-list 터치 스크롤 보정 ── */
