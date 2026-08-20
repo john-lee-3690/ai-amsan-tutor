@@ -1994,13 +1994,15 @@ body.gqz-kp-big .mnt-key{font-size:clamp(26px,8vw,36px);min-height:56px;}
       </div>
     </div>
     <!-- 4. 몫이 두자리인 나눗셈 -->
-    <div class="mult-item mult-item-locked" id="div-2digit-wrap">
+    <div class="mult-item mult-item-expand" id="div-2digit-wrap">
       <div class="mult-num">4</div>
       <div class="mult-body" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 14px;">
         <div class="mult-name">몫이 두자리인 나눗셈</div>
-        <div class="mult-desc" style="font-size:11px;color:rgba(218,172,90,.6);margin-bottom:2px;">441÷7=63 형태 · 준비 중</div>
+        <div class="mult-desc" style="font-size:11px;color:rgba(218,172,90,.6);margin-bottom:2px;">441÷7=63 형태 · 3자리÷1자리 · 20문제</div>
+        <div style="display:flex;gap:8px;">
+          <button class="mult-sub-btn mult-sub-btn-go" onclick="openDivTwoDigit();event.stopPropagation()">▶ 시작하기</button>
+        </div>
       </div>
-      <div class="mult-arr">🔒</div>
     </div>
     <!-- 5. 큰 수의 나눗셈 -->
     <div class="mult-item mult-item-locked" id="div-big-wrap">
@@ -6170,6 +6172,14 @@ function divqGenProbs(mode,count){
       const quotient=Math.floor(Math.random()*8)+2; // 2~9
       const remainder=Math.floor(Math.random()*(divisor-1))+1; // 1~divisor-1
       res.push({dividend:divisor*quotient+remainder, divisor, quotient, remainder});
+    } else if(mode==='twodigit'){
+      const divisor=Math.floor(Math.random()*8)+2; // 2~9
+      let quotient, dividend;
+      do{
+        quotient=Math.floor(Math.random()*90)+10; // 10~99 (몫이 항상 두 자리)
+        dividend=divisor*quotient;
+      }while(dividend<100||dividend>999); // 나누어지는 수는 3자리로 제한
+      res.push({dividend, divisor, quotient});
     }
   }
   return res;
@@ -6178,6 +6188,7 @@ function divqGenProbs(mode,count){
 function openDivFill(){ divqStart('fill','구구단 채우기'); }
 function openDivBasic(){ divqStart('basic','곱셈구구 나눗셈'); }
 function openDivRemainder(){ divqStart('remainder','나머지가 있는 나눗셈'); }
+function openDivTwoDigit(){ divqStart('twodigit','몫이 두자리인 나눗셈'); }
 
 function divqStart(mode,title){
   playTick();
@@ -6198,6 +6209,9 @@ function divqEqHtml(p){
   if(divqMode==='basic'){
     return `${p.dividend} ÷ ${p.divisor} = <span class="gqz-blank" id="mnt-blank">?</span>
       <div class="divq-hint-line">${p.dividend} = ( ${p.divisor} × <span id="divq-hint-blank">?</span> )</div>`;
+  }
+  if(divqMode==='twodigit'){
+    return `${p.dividend} ÷ ${p.divisor} = <span class="gqz-blank" id="mnt-blank">?</span>`;
   }
   // remainder: 몫/나머지 두 칸을 명확히 라벨로 구분. 나누는 수(오른쪽 끝) 아래로 세로 정렬되도록
   // 전체를 오른쪽 정렬 inline-block으로 감싸서, "몫=" "나머지=" 값의 오른쪽 끝이 divisor 끝과 맞도록 함
@@ -6266,6 +6280,9 @@ function divqEnter(e){
   } else if(divqMode==='basic'){
     isCorrect = userAns===p.quotient;
     ansDisplay = p.quotient;
+  } else if(divqMode==='twodigit'){
+    isCorrect = userAns===p.quotient;
+    ansDisplay = p.quotient;
   } else {
     isCorrect = (divqQuot===p.quotient) && (userAns===p.remainder);
     ansDisplay = p.remainder;
@@ -6282,7 +6299,7 @@ function divqEnter(e){
   const box=document.getElementById('mnt-fb-box');
   const fullEq = divqMode==='fill'
     ? `${p.dan} × ${p.m} = ${p.ans}`
-    : divqMode==='basic'
+    : (divqMode==='basic'||divqMode==='twodigit')
       ? `${p.dividend} ÷ ${p.divisor} = ${p.quotient}`
       : `${p.dividend} ÷ ${p.divisor} = ${p.quotient} ··· ${p.remainder}`;
   if(isCorrect){
