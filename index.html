@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!-- shell v1 — 가상 폰 프레임 (iframe으로 app.html을 감쌈) -->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="theme-color" content="#2A1608">
+<title>AI암산튜터</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #1b0d05; /* 여백 영역 배경 — 추후 메뉴트리/광고 자리 */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 여백에 표시할 자리표시자 (지금은 최소한의 브랜딩만) */
+  #shell-placeholder {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.18);
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    font-size: 15px;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app-frame-wrap {
+    position: fixed;
+    z-index: 1;
+    box-sizing: border-box;
+    /* 태블릿에서만 살짝 액자 느낌 — 실제 폰(풀스크린)일 땐 시각적으로 거의 안 보임 */
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.5);
+    background: #000;
+    overflow: hidden;
+  }
+
+  #app-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+</style>
+</head>
+<body>
+
+<div id="shell-placeholder">AI암산튜터</div>
+
+<div id="app-frame-wrap">
+  <iframe id="app-frame" src="app.html" title="AI암산튜터" allow="autoplay"></iframe>
+</div>
+
+<script>
+(function(){
+  // ── 가상 폰 프레임 치수 설정 ──
+  var PHONE_MIN_W = 360;
+  var PHONE_MAX_W = 420;
+  var PHONE_MAX_H = 900;
+  var PHONE_ASPECT = 844 / 390; // 대표적인 폰 세로 비율 (약 2.16)
+
+  // 짧은 변이 이 값을 넘으면 "태블릿급 화면"으로 판단 (실제 폰은 어느 방향이든
+  // 짧은 변이 이보다 작음 — 가장 큰 폰도 CSS 기준 약 430px대)
+  var TABLET_SHORT_SIDE_THRESHOLD = 500;
+
+  var wrap  = document.getElementById('app-frame-wrap');
+  var frame = document.getElementById('app-frame');
+
+  function layout(){
+    var rawW = window.innerWidth;
+    var rawH = window.innerHeight;
+    var shortSide = Math.min(rawW, rawH);
+    var isTablet = shortSide > TABLET_SHORT_SIDE_THRESHOLD;
+
+    var frameW, frameH;
+
+    if (!isTablet) {
+      // 실제 폰: 프레임 = 화면 전체 (기존 동작과 100% 동일, 가로/세로 모두 앱이 알아서 처리)
+      frameW = rawW;
+      frameH = rawH;
+    } else {
+      // 태블릿 등 큰 화면: 세로 폰 모양으로 고정 (태블릿을 눕혀도 세로 프레임 유지)
+      frameW = Math.min(PHONE_MAX_W, Math.max(PHONE_MIN_W, Math.round(rawW * 0.42)));
+      frameH = Math.round(frameW * PHONE_ASPECT);
+
+      // 화면 높이를 넘으면 비율 유지한 채 축소
+      var maxH = Math.min(PHONE_MAX_H, rawH);
+      if (frameH > maxH) {
+        frameH = maxH;
+        frameW = Math.round(frameH / PHONE_ASPECT);
+        // 축소하더라도 최소 폭은 보장 시도 (극단적으로 낮은 화면일 때 대비)
+        if (frameW < PHONE_MIN_W) frameW = Math.min(PHONE_MIN_W, rawW);
+      }
+    }
+
+    wrap.style.width  = frameW + 'px';
+    wrap.style.height = frameH + 'px';
+    wrap.style.right  = '0px';
+    wrap.style.bottom = '0px';
+    // 실제 폰일 때는 액자 티가 안 나야 하므로 라운드/그림자 제거
+    wrap.style.borderRadius = isTablet ? '18px' : '0px';
+    wrap.style.boxShadow = isTablet
+      ? '0 0 0 1px rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.5)'
+      : 'none';
+  }
+
+  layout();
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function(){
+    // 일부 브라우저는 orientationchange 직후 innerWidth/Height 갱신이 늦으므로 살짝 지연
+    setTimeout(layout, 50);
+    setTimeout(layout, 300);
+  });
+})();
+</script>
+
+</body>
+</html>
