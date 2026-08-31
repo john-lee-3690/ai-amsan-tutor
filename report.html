@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>학습 리포트</title>
+<script src="achievement-scoring.js"></script>
+<style>
+  :root{
+    --bg:#1a1006; --surface:#2A1A0E; --border:#4a3420;
+    --gold:#E8C57A; --gold-dim:#a88a55; --text:#f0e6d8; --text-dim:#c4b39c;
+    --green:#4fae6e; --accent:#c97b3a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:radial-gradient(ellipse at 50% 0%,#2D1B00 0%,#0A0600 70%);
+    color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;padding:20px 16px 60px;}
+  .wrap{max-width:420px;margin:0 auto;}
+  .header{display:flex;align-items:center;gap:10px;margin-bottom:24px;}
+  .avatar{width:42px;height:42px;border-radius:50%;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
+  .header h1{font-size:16px;margin:0;font-weight:700;}
+  .header p{font-size:12px;color:var(--text-dim);margin:2px 0 0;}
+  .section-label{font-size:13px;color:var(--gold-dim);margin:0 0 8px;font-weight:500;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:16px;margin-bottom:20px;}
+  .progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
+  .progress-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
+  .progress-card .lbl{font-size:12px;color:var(--text-dim);margin:0 0 4px;}
+  .progress-card .val{font-size:22px;font-weight:700;margin:0;color:var(--gold);}
+  .progress-card .val small{font-size:13px;color:var(--text-dim);font-weight:400;}
+  .bar-bg{height:6px;background:var(--border);border-radius:4px;margin-top:8px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--green);}
+  .comp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .comp-top .lbl{font-size:13px;color:var(--text-dim);}
+  .comp-top .val{font-size:20px;font-weight:700;color:var(--gold);}
+  .comp-note{font-size:12px;color:var(--text-dim);margin:10px 0 0;}
+  .badges{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .badge{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:12px;text-align:center;opacity:0.35;}
+  .badge.earned{opacity:1;border-color:var(--gold-dim);background:linear-gradient(160deg,#3a2410,#2A1A0E);}
+  .badge .emoji{font-size:26px;display:block;margin-bottom:6px;}
+  .badge .name{font-size:13px;font-weight:700;}
+  .encourage{border:1px dashed var(--gold-dim);border-radius:12px;padding:12px 14px;
+    text-align:center;font-size:13px;color:var(--gold);margin-top:14px;}
+  .empty-state{text-align:center;color:var(--text-dim);font-size:13px;padding:40px 0;}
+  .sparkline{width:100%;height:50px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="empty-state" id="loading">불러오는 중...</div>
+</div>
+
+<script>
+const GATE_SUPABASE_URL = 'https://vuiuthguigppbqswsyta.supabase.co';
+const GATE_SUPABASE_ANON_KEY = 'sb_publishable_YeqnVAg5Lb2_yBesz2UcRQ_dSPkYlLf';
+
+// 이 리포트가 다루는 파일럿 챕터(1.1 + 구구단) 필수 유닛 목록.
+// 확장 콘텐츠((4)(5), 5를 이용한 두 자리 수 등)는 비필수 확정이라 여기서 제외.
+const REPORT_CONFIG = {
+  requiredUnits: [
+    'add_0_1','add_0_2','add_0_3','add_0_4',              // (1) 주판알 식별
+    'add_1_1_1','add_1_1_2','add_1_1_3',                  // (2) 아래알 덧뺄셈
+    'add_1_2_1','add_1_2_2','add_1_2_3'                   // (3) 위아래알 덧뺄셈
+  ],
+  guguDans: [2,3,4,5,6,7,8,9]
+};
+
+const BADGE_META = {
+  명중왕: { emoji: '🎯' },
+  점프왕: { emoji: '🚀' },
+  뚝심왕: { emoji: '💪' },
+  마무리왕: { emoji: '🏁' }
+};
+
+async function fetchJSON(url){
+  const res = await fetch(url, {
+    headers: {
+      'apikey': GATE_SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${GATE_SUPABASE_ANON_KEY}`
+    }
+  });
+  if (!res.ok) throw new Error(`요청 실패: ${res.status}`);
+  return res.json();
+}
+
+function renderError(msg){
+  document.getElementById('app').innerHTML = `<div class="empty-state">${msg}</div>`;
+}
+
+function renderReport(report){
+  const app = document.getElementById('app');
+  const p = report.progress, c = report.comprehension, b = report.badges;
+
+  let html = `
+    <div class="header">
+      <div class="avatar">🧒</div>
+      <div>
+        <h1>학습 리포트</h1>
+        <p>단순 덧뺄셈(1.1) · 구구단 외우기</p>
+      </div>
+    </div>
+
+    <p class="section-label">진도</p>
+    <div class="progress-grid">
+      <div class="progress-card">
+        <p class="lbl">단순 덧뺄셈</p>
+        <p class="val">${p.lesson.done}<small> / ${p.lesson.total}</small></p>
+        <div class="bar-bg"><div class="bar-fill" style="width:${p.lesson.pct}%"></div></div>
+      </div>
+      <div class="progress-card">
+        <p class="lbl">구구단</p>
+        <p class="val">${p.gugu.done}<small> / ${p.gugu.total}단</small></p>
+        <div class="bar-bg"><div class="bar-fill" style="width:${p.gugu.pct}%"></div></div>
+      </div>
+    </div>
+
+    <p class="section-label">이해도</p>
+    <div class="card">`;
+
+  if (c.recentAvg === null){
+    html += `<p class="comp-note">아직 기록이 부족해요. 몇 번 더 풀어보면 여기에 정확도 추이가 보여요.</p>`;
+  } else {
+    html += `
+      <div class="comp-top">
+        <span class="lbl">최근 정확도</span>
+        <span class="val">${c.recentAvg}%</span>
+      </div>
+      ${renderSparkline(c.trend)}
+      ${c.avgAttemptsToPass !== null ? `<p class="comp-note">평균 ${c.avgAttemptsToPass}회 만에 통과하고 있어요</p>` : ''}
+    `;
+  }
+
+  html += `</div><p class="section-label">성취도</p><div class="badges">`;
+  for (const name in BADGE_META){
+    const meta = BADGE_META[name];
+    const earned = b[name].earned;
+    html += `
+      <div class="badge ${earned ? 'earned' : ''}">
+        <span class="emoji">${meta.emoji}</span>
+        <span class="name">${name}</span>
+      </div>`;
+  }
+  html += `</div>`;
+
+  if (report.encouragement){
+    html += `<div class="encourage">${BADGE_META[report.encouragement.badgeName].emoji} ${report.encouragement.message}</div>`;
+  }
+
+  app.innerHTML = html;
+}
+
+function renderSparkline(trend){
+  if (!trend || trend.length < 2) return '';
+  const w = 280, h = 50, pad = 6;
+  const max = 100, min = 0;
+  const stepX = (w - pad*2) / (trend.length - 1);
+  const points = trend.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = pad + (1 - (v - min) / (max - min)) * (h - pad*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const circles = trend.map((v, i) => {
+    const [x, y] = points[i].split(',');
+    return `<circle cx="${x}" cy="${y}" r="3" fill="#4fae6e"/>`;
+  }).join('');
+  return `<svg class="sparkline" viewBox="0 0 ${w} ${h}">
+    <polyline points="${points.join(' ')}" fill="none" stroke="#4fae6e" stroke-width="2.5"/>
+    ${circles}
+  </svg>`;
+}
+
+async function main(){
+  const token = new URLSearchParams(location.search).get('t');
+  if (!token){ renderError('잘못된 링크입니다.'); return; }
+
+  try {
+    // 1. 토큰 → student_id
+    const links = await fetchJSON(
+      `${GATE_SUPABASE_URL}/rest/v1/report_links?token=eq.${encodeURIComponent(token)}&select=*`
+    );
+    const link = links[0];
+    if (!link){ renderError('링크를 찾을 수 없어요. 다시 요청해주세요.'); return; }
+    if (link.expires_at && new Date(link.expires_at) < new Date()){
+      renderError('링크가 만료됐어요. 새 링크를 요청해주세요.');
+      return;
+    }
+
+    // 2. student_id로 진도 이벤트 전체 조회
+    const events = await fetchJSON(
+      `${GATE_SUPABASE_URL}/rest/v1/progress_events?student_id=eq.${link.student_id}&select=*&order=created_at.asc`
+    );
+
+    if (events.length === 0){
+      renderError('아직 학습 기록이 없어요. 첫 레슨을 완료하면 여기에 나타나요.');
+      return;
+    }
+
+    // 3. 계산 (achievement-scoring.js)
+    const report = computeAchievementReport(events, REPORT_CONFIG);
+    renderReport(report);
+  } catch(err){
+    renderError('불러오는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.');
+  }
+}
+
+main();
+</script>
+</body>
+</html>
