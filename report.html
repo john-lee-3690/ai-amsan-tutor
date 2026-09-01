@@ -12,41 +12,47 @@
   :root{
     --bg:#1a1006; --surface:#2A1A0E; --border:#4a3420;
     --gold:#E8C57A; --gold-dim:#a88a55; --text:#f0e6d8; --text-dim:#c4b39c;
-    --green:#4fae6e; --accent:#c97b3a;
+    --green:#4fae6e; --accent:#c97b3a; --red:#c96a5a;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:radial-gradient(ellipse at 50% 0%,#2D1B00 0%,#0A0600 70%);
     color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;padding:20px 16px 60px;}
   .wrap{max-width:420px;margin:0 auto;}
-  .header{display:flex;align-items:center;gap:10px;margin-bottom:24px;}
-  .avatar{width:42px;height:42px;border-radius:50%;background:var(--accent);
-    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;}
-  .header h1{font-size:16px;margin:0;font-weight:700;}
-  .header p{font-size:12px;color:var(--text-dim);margin:2px 0 0;}
-  .section-label{font-size:13px;color:var(--gold-dim);margin:0 0 8px;font-weight:500;}
+  .header{margin-bottom:6px;}
+  .header h2{font-size:17px;margin:0;font-weight:700;color:var(--text);}
+  .header p{font-size:12px;color:var(--text-dim);margin:4px 0 18px;line-height:1.5;}
+  .tier-banner{background:linear-gradient(160deg,#3a2410,#2A1A0E);border:1px solid var(--gold-dim);
+    border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13px;color:var(--gold);line-height:1.5;}
+  .section-label{font-size:13px;color:var(--gold-dim);margin:18px 0 8px;font-weight:500;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
-    padding:16px;margin-bottom:20px;}
-  .progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
-  .progress-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;}
-  .progress-card .lbl{font-size:12px;color:var(--text-dim);margin:0 0 4px;}
-  .progress-card .val{font-size:22px;font-weight:700;margin:0;color:var(--gold);}
-  .progress-card .val small{font-size:13px;color:var(--text-dim);font-weight:400;}
-  .bar-bg{height:6px;background:var(--border);border-radius:4px;margin-top:8px;overflow:hidden;}
-  .bar-fill{height:100%;background:var(--green);}
-  .comp-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
-  .comp-top .lbl{font-size:13px;color:var(--text-dim);}
-  .comp-top .val{font-size:20px;font-weight:700;color:var(--gold);}
-  .comp-note{font-size:12px;color:var(--text-dim);margin:10px 0 0;}
-  .badges{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .badge{background:var(--surface);border:1px solid var(--border);border-radius:12px;
-    padding:12px;text-align:center;opacity:0.35;}
-  .badge.earned{opacity:1;border-color:var(--gold-dim);background:linear-gradient(160deg,#3a2410,#2A1A0E);}
-  .badge .emoji{font-size:26px;display:block;margin-bottom:6px;}
-  .badge .name{font-size:13px;font-weight:700;}
-  .encourage{border:1px dashed var(--gold-dim);border-radius:12px;padding:12px 14px;
-    text-align:center;font-size:13px;color:var(--gold);margin-top:14px;}
+    padding:16px;margin-bottom:16px;}
+  .sw-row{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5;}
+  .sw-row:last-child{border-bottom:none;}
+  .sw-row b{color:var(--green);}
+  .sw-row.bad b{color:var(--red);}
+  .next-unit-card{display:flex;align-items:center;gap:12px;}
+  .next-unit-card .icon{width:36px;height:36px;border-radius:50%;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+  .placeholder{border:1px dashed var(--border);border-radius:12px;padding:14px;
+    text-align:center;color:var(--text-dim);font-size:12px;}
+  .empty-note{font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0;}
+  .log-scroll{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+  table.log{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;}
+  table.log th{background:#1f1409;color:var(--gold-dim);text-align:left;padding:8px 10px;font-weight:500;}
+  table.log td{padding:8px 10px;border-top:1px solid var(--border);color:var(--text);}
+  table.log tr.unit-row{cursor:pointer;}
+  table.log tr.unit-row:hover td{background:#241708;}
+  .filter-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);
+    border:1px solid var(--gold-dim);color:var(--gold);border-radius:16px;padding:4px 10px;
+    font-size:12px;margin-bottom:8px;cursor:pointer;}
+  .acc-good{color:var(--green);}
+  .acc-bad{color:var(--red);}
+  .trend-chart{display:flex;align-items:flex-end;gap:6px;height:90px;padding-top:20px;}
+  .trend-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;}
+  .trend-num{font-size:11px;color:var(--gold);margin-bottom:4px;font-weight:700;}
+  .trend-bar{width:100%;max-width:28px;background:var(--green);border-radius:4px 4px 0 0;}
+  .trend-date{font-size:9px;color:var(--text-dim);margin-top:4px;}
   .empty-state{text-align:center;color:var(--text-dim);font-size:13px;padding:40px 0;}
-  .sparkline{width:100%;height:50px;}
 </style>
 </head>
 <body>
@@ -60,21 +66,13 @@ const GATE_SUPABASE_ANON_KEY = 'sb_publishable_YeqnVAg5Lb2_yBesz2UcRQ_dSPkYlLf';
 
 // 이 리포트가 다루는 파일럿 챕터(1.1 + 구구단) 필수 유닛 목록.
 // 확장 콘텐츠((4)(5), 5를 이용한 두 자리 수 등)는 비필수 확정이라 여기서 제외.
-const REPORT_CONFIG = {
-  requiredUnits: [
-    'add_0_1','add_0_2','add_0_3','add_0_4',              // (1) 주판알 식별
-    'add_1_1_1','add_1_1_2','add_1_1_3',                  // (2) 아래알 덧뺄셈
-    'add_1_2_1','add_1_2_2','add_1_2_3'                   // (3) 위아래알 덧뺄셈
-  ],
-  guguDans: [2,3,4,5,6,7,8,9]
-};
+const CURRICULUM = [
+  'add_0_1','add_0_2','add_0_3','add_0_4',
+  'add_1_1_1','add_1_1_2','add_1_1_3',
+  'add_1_2_1','add_1_2_2','add_1_2_3'
+];
 
-const BADGE_META = {
-  명중왕: { emoji: '🎯' },
-  점프왕: { emoji: '🚀' },
-  뚝심왕: { emoji: '💪' },
-  마무리왕: { emoji: '🏁' }
-};
+function displayName(unitId){ return getConceptForUnit(unitId); }
 
 async function fetchJSON(url){
   const res = await fetch(url, {
@@ -91,86 +89,114 @@ function renderError(msg){
   document.getElementById('app').innerHTML = `<div class="empty-state">${msg}</div>`;
 }
 
-function renderReport(report){
-  const app = document.getElementById('app');
-  const p = report.progress, c = report.comprehension, b = report.badges;
-
-  let html = `
-    <div class="header">
-      <div class="avatar">🧒</div>
-      <div>
-        <h1>학습 리포트</h1>
-        <p>단순 덧뺄셈(1.1) · 구구단 외우기</p>
-      </div>
-    </div>
-
-    <p class="section-label">진도</p>
-    <div class="progress-grid">
-      <div class="progress-card">
-        <p class="lbl">단순 덧뺄셈</p>
-        <p class="val">${p.lesson.done}<small> / ${p.lesson.total}</small></p>
-        <div class="bar-bg"><div class="bar-fill" style="width:${p.lesson.pct}%"></div></div>
-      </div>
-      <div class="progress-card">
-        <p class="lbl">구구단</p>
-        <p class="val">${p.gugu.done}<small> / ${p.gugu.total}단</small></p>
-        <div class="bar-bg"><div class="bar-fill" style="width:${p.gugu.pct}%"></div></div>
-      </div>
-    </div>
-
-    <p class="section-label">이해도</p>
-    <div class="card">`;
-
-  if (c.recentAvg === null){
-    html += `<p class="comp-note">아직 기록이 부족해요. 몇 번 더 풀어보면 여기에 정확도 추이가 보여요.</p>`;
-  } else {
-    html += `
-      <div class="comp-top">
-        <span class="lbl">최근 정확도</span>
-        <span class="val">${c.recentAvg}%</span>
-      </div>
-      ${renderSparkline(c.trend)}
-      ${c.avgAttemptsToPass !== null ? `<p class="comp-note">평균 ${c.avgAttemptsToPass}회 만에 통과하고 있어요</p>` : ''}
-    `;
-  }
-
-  html += `</div><p class="section-label">성취도</p><div class="badges">`;
-  for (const name in BADGE_META){
-    const meta = BADGE_META[name];
-    const earned = b[name].earned;
-    html += `
-      <div class="badge ${earned ? 'earned' : ''}">
-        <span class="emoji">${meta.emoji}</span>
-        <span class="name">${name}</span>
-      </div>`;
-  }
-  html += `</div>`;
-
-  if (report.encouragement){
-    html += `<div class="encourage">${BADGE_META[report.encouragement.badgeName].emoji} ${report.encouragement.message}</div>`;
-  }
-
-  app.innerHTML = html;
+function renderTrendChart(events){
+  const scored = events.filter(e => typeof e.score === 'number')
+    .sort((a,b) => new Date(a.created_at) - new Date(b.created_at)).slice(-5);
+  if (scored.length < 2) return '<p style="font-size:12px;color:var(--text-dim)">아직 그래프를 그릴 만큼 기록이 없어요</p>';
+  let html = '<div class="trend-chart">';
+  scored.forEach(e => {
+    const v = normalizeScore(e);
+    const d = new Date(e.created_at);
+    html += `<div class="trend-bar-wrap">
+      <span class="trend-num">${v}%</span>
+      <div class="trend-bar" style="height:${Math.max(6,v)}%"></div>
+      <span class="trend-date">${d.getMonth()+1}/${d.getDate()}</span>
+    </div>`;
+  });
+  return html + '</div>';
 }
 
-function renderSparkline(trend){
-  if (!trend || trend.length < 2) return '';
-  const w = 280, h = 50, pad = 6;
-  const max = 100, min = 0;
-  const stepX = (w - pad*2) / (trend.length - 1);
-  const points = trend.map((v, i) => {
-    const x = pad + i * stepX;
-    const y = pad + (1 - (v - min) / (max - min)) * (h - pad*2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
+function fmtTime(sec){
+  if (!sec) return '-';
+  const m = Math.floor(sec/60), s = sec%60;
+  return m>0 ? `${m}분 ${s}초` : `${s}초`;
+}
+
+let currentFilter = null;
+let currentLog = [];
+
+function renderLogTable(){
+  const rows = currentFilter ? currentLog.filter(r => displayName(r.unitId) === currentFilter) : currentLog;
+  let html = '';
+  if (currentFilter){
+    html += `<div class="filter-chip" onclick="setFilter(null)">${currentFilter} 만 보는 중 ✕</div>`;
+  }
+  html += `<div class="log-scroll"><table class="log"><thead><tr>
+    <th>날짜</th><th>단원</th><th>유형</th><th>문제수</th><th>점수</th><th>정확도</th><th>소요시간</th><th>또래비교</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const accClass = r.accuracy >= 80 ? 'acc-good' : 'acc-bad';
+    const name = displayName(r.unitId);
+    html += `<tr class="unit-row" onclick="setFilter('${name}')">
+      <td>${r.date.toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})}</td>
+      <td style="color:var(--gold)">${name}</td>
+      <td>${r.typeLabel}</td>
+      <td>${r.problemCount ?? '-'}</td>
+      <td>${r.correctCount ?? '-'}/${r.problemCount ?? '-'}</td>
+      <td class="${accClass}">${r.accuracy}%</td>
+      <td>${fmtTime(r.elapsedSec)}</td>
+      <td style="color:var(--text-dim)">준비중</td>
+    </tr>`;
   });
-  const circles = trend.map((v, i) => {
-    const [x, y] = points[i].split(',');
-    return `<circle cx="${x}" cy="${y}" r="3" fill="#4fae6e"/>`;
-  }).join('');
-  return `<svg class="sparkline" viewBox="0 0 ${w} ${h}">
-    <polyline points="${points.join(' ')}" fill="none" stroke="#4fae6e" stroke-width="2.5"/>
-    ${circles}
-  </svg>`;
+  return html + '</tbody></table></div>';
+}
+
+function setFilter(name){
+  currentFilter = name;
+  document.getElementById('log-container').innerHTML = renderLogTable();
+}
+
+function renderReport(events, isTrial){
+  const dash = computeEnrolledDashboard(events, CURRICULUM, 0); // peerSampleSize=0 — 또래 집계 인프라 준비 전
+  const comp = computeComprehension(events);
+  currentLog = computeLearningLog(events);
+  currentFilter = null;
+
+  let html = `<div class="header">
+    <h2>학습 리포트</h2>
+    <p>주산 학습의 정확도와 속도, 그리고 성과를 보여줍니다.</p>
+  </div>`;
+
+  if (isTrial){
+    const tm = computeTierMessage(comp);
+    if (tm) html += `<div class="tier-banner">${tm.message}</div>`;
+  }
+
+  html += `<p class="section-label">지금 하고 있는 단원</p>
+    <div class="card next-unit-card"><div class="icon">📖</div>
+    <div><div style="font-weight:700;font-size:14px;">${dash.nextUnit ? displayName(dash.nextUnit) : '전체 완료'}</div></div></div>`;
+
+  html += `<p class="section-label">최근 정확도 추이</p><div class="card">
+    ${renderTrendChart(events)}
+    ${comp.avgAttemptsToPass !== null ? `<p style="font-size:12px;color:var(--text-dim);margin:12px 0 0">평균 ${comp.avgAttemptsToPass}회 만에 통과하고 있어요</p>` : ''}
+    </div>`;
+
+  html += '<p class="section-label">강점</p><div class="card">';
+  if (dash.strengths.length === 0){
+    html += '<p class="empty-note">아직 뚜렷한 강점이 나타날 만큼 기록이 쌓이지 않았어요</p>';
+  } else {
+    dash.strengths.forEach(s => {
+      html += `<div class="sw-row">${s.message.replace(s.concept, `<b>${s.concept}</b>`)}</div>`;
+    });
+  }
+  html += '</div>';
+
+  html += '<p class="section-label">더 연습하면 좋은 부분</p><div class="card">';
+  if (dash.weaknesses.length === 0){
+    html += '<p class="empty-note">지금은 특별히 부족한 부분이 없어요 👍</p>';
+  } else {
+    dash.weaknesses.forEach(w => {
+      html += `<div class="sw-row bad">${w.message.replace(w.concept, `<b>${w.concept}</b>`)}</div>`;
+    });
+  }
+  html += '</div>';
+
+  html += `<p class="section-label">또래 대비</p>
+    <div class="placeholder">아직 비교할 만큼 데이터가 모이지 않았어요<br>곧 제공될 예정이에요</div>`;
+
+  html += `<p class="section-label">학습 현황</p><div id="log-container">${renderLogTable()}</div>`;
+
+  document.getElementById('app').innerHTML = html;
 }
 
 async function main(){
@@ -189,7 +215,16 @@ async function main(){
       return;
     }
 
-    // 2. student_id로 진도 이벤트 전체 조회
+    // 2. student_id → tier 역조회 (체험 단계 격려 배너 표시 여부 판단용)
+    let isTrial = false;
+    try {
+      const codes = await fetchJSON(
+        `${GATE_SUPABASE_URL}/rest/v1/access_codes?student_id=eq.${link.student_id}&select=tier`
+      );
+      isTrial = codes.some(c => c.tier === '홍보');
+    } catch(e) { /* 조회 실패해도 리포트 자체는 보여줌 */ }
+
+    // 3. student_id로 진도 이벤트 전체 조회
     const events = await fetchJSON(
       `${GATE_SUPABASE_URL}/rest/v1/progress_events?student_id=eq.${link.student_id}&select=*&order=created_at.asc`
     );
@@ -199,9 +234,7 @@ async function main(){
       return;
     }
 
-    // 3. 계산 (achievement-scoring.js)
-    const report = computeAchievementReport(events, REPORT_CONFIG);
-    renderReport(report);
+    renderReport(events, isTrial);
   } catch(err){
     renderError('불러오는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.');
   }
