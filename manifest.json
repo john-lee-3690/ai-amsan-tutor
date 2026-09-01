@@ -1,0 +1,16 @@
+{
+  "name": "AI Amsan Tutor",
+  "short_name": "AI암산튜터",
+  "description": "AI Abacus, Mental Arithmetic Tutor",
+  "start_url": "./app.html",
+  "display": "standalone",
+  "background_color": "#2A1608",
+  "theme_color": "#2A1608",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
