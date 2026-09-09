@@ -5060,6 +5060,14 @@ function addTestFinish_(){
   const stars = score===100?3:score>=75?2:1;
   addTestCurrentLog = addTestFullLog.slice();
   addTestSaveHistory(score, elapsed, stars, subMap);
+  // 서버 동기화 — 진도관리(잠금) 판정에 쓰일 단원테스트 결과 기록 (실패해도 로컬 저장엔 영향 없음)
+  syncProgressEvent(addCurrentUnitId, 'unit_test', {
+    mode: addTestMode_,
+    score: totalCorrect,
+    maxScore: currentTestSuite.total,
+    elapsedSec: elapsed,
+    passed: score >= 80,
+  });
   addTestShowResult(score, stars, elapsed, subMap, totalCorrect);
 
   // 우주여행 마일리지에도 이번 단원테스트 결과 반영 + 결과 잠깐 보여준 뒤 자동으로 마일리지 화면 전환
@@ -13493,6 +13501,11 @@ function speedFinish(){
   document.getElementById('speed-timer').style.display = 'none';
   addGuideMode = 'hosan';
   const best = speedSaveHistory();
+  // 서버 동기화 — 스피드게임은 완료기준이 없어 passed는 안 보냄 (기록용)
+  syncProgressEvent(addCurrentUnitId, 'speed_game', {
+    mode: speedMode_,
+    score: speedScore,
+  });
   speedShowResult(best);
 }
 
