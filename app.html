@@ -1320,7 +1320,7 @@ body.gqz-kp-big .mnt-key{font-size:clamp(26px,8vw,36px);min-height:56px;}
   <!-- 주의: 서버가 파일별 Last-Modified를 정확히 안 줄 수 있어 document.lastModified 대신
        파일을 만들 때마다 이 문자열을 직접 갱신하는 방식으로 바꿈 (아래 한 줄만 수정하면 됨) -->
   <div id="dev-build-stamp" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
-    font-size:16px;font-weight:700;color:rgba(230,190,110,.7);letter-spacing:.5px;pointer-events:none;z-index:50;">🛠 빌드 2026-10-26 06:37 (KST)</div>
+    font-size:16px;font-weight:700;color:rgba(230,190,110,.7);letter-spacing:.5px;pointer-events:none;z-index:50;">🛠 빌드 2026-10-26 23:45 (KST)</div>
   <!-- // DEV-ONLY 끝 -->
   <div id="sel-title">AI 암산 튜터</div>
   <div id="sel-sub">AI튜터가 가르쳐주는 주산암산 레슨</div>
@@ -17614,5 +17614,7 @@ function flashHandleViewportChange(){
 window.addEventListener('resize', flashHandleViewportChange);
 window.addEventListener('orientationchange', flashHandleViewportChange);
 </script>
+<!-- 알림관리 2a: 학습 시작/완료 기록 — 기존 함수는 바깥에서 감싸기만 함, 반드시 맨 끝에서 로드 -->
+<script src="notify-client.js"></script>
 </body>
 </html>
