@@ -735,11 +735,47 @@ function notifRenderPill(){
   pill.innerHTML = `🧮 <b>이번 시간</b><span>${notifEsc(V.cur.title)}</span>▼`;
   pill.onclick = () => { try { playTick(); } catch(e){} notifShowPopup(); };
   scr.appendChild(pill);
-  const h = pill.offsetHeight || 34;
-  // 제목 아래 ~ 과목 버튼 위 빈 자리 가운데. 자리가 좁으면 과목 버튼 위쪽 끝에 걸치되 주판 영역으로는 내려가지 않음
-  let top = M.subBottom + Math.max(4, (M.menuTop - M.subBottom - h) / 2);
-  top = Math.min(top, M.bottom - h - 4);
-  pill.style.top = Math.max(M.top, top) + 'px';
+  notifPlayPlace();
+  notifPlayWatch();
+}
+
+// 위치 다시 맞추기 — 홈 배치가 늦게 정해지는 경우(글꼴 로딩·layoutSelect)를 따라감. 홈 배치 자체는 건드리지 않음
+function notifPlayPlace(){
+  const M = notifMenuRect(); if (!M) return;
+  const pill = document.getElementById('notif-play-pill');
+  if (pill){
+    const h = pill.offsetHeight || 34;
+    // 제목 아래 ~ 과목 버튼 위 빈 자리 가운데. 자리가 좁으면 과목 버튼 위쪽 끝에 걸치되 주판 영역으로는 내려가지 않음
+    let top = M.subBottom + Math.max(4, (M.menuTop - M.subBottom - h) / 2);
+    top = Math.min(top, M.bottom - h - 4);
+    pill.style.top = Math.max(M.top, top) + 'px';
+  }
+  const box = document.getElementById('notif-play-box');
+  if (box){
+    box.style.top = Math.max(4, M.top) + 'px';
+    box.style.maxHeight = Math.max(120, M.bottom - Math.max(4, M.top) - 4) + 'px';   // 주판 영역 위까지만
+  }
+}
+let notifPlayWatchOn = false;
+function notifPlayWatch(){
+  [50, 300, 1000, 2500].forEach(ms => setTimeout(notifPlayPlace, ms));
+  if (notifPlayWatchOn) return; notifPlayWatchOn = true;
+  try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => notifPlayPlace()); } catch(e){}
+  try {
+    if (typeof layoutSelect === 'function' && !layoutSelect._notifWrapped){
+      const orig = layoutSelect;
+      const w = function(){ const r = orig.apply(this, arguments); try { setTimeout(notifPlayPlace, 30); } catch(e){} return r; };
+      w._notifWrapped = true;
+      window.layoutSelect = w;
+    }
+  } catch(e){}
+  try {
+    if (window.ResizeObserver){
+      const ro = new ResizeObserver(() => notifPlayPlace());
+      ['sel-title','sel-sub','home-menu','home-content-zone','home-aba-wrap'].forEach(id => { const e = document.getElementById(id); if (e) ro.observe(e); });
+      document.querySelectorAll('#scr-sel .home-flex-spacer').forEach(e => ro.observe(e));   // 주판 크기가 정해지면서 메뉴 위치가 바뀌는 경우
+    }
+  } catch(e){}
 }
 
 // 펼친 박스 — 메뉴 화면 영역 안에만
@@ -769,8 +805,8 @@ function notifShowPopup(praise){
   };
   scr.appendChild(catcher);
   scr.appendChild(box);
-  box.style.top = Math.max(4, M.top) + 'px';
-  box.style.maxHeight = Math.max(120, M.bottom - Math.max(4, M.top) - 4) + 'px';   // 주판 영역 위까지만
+  notifPlayPlace();
+  notifPlayWatch();
 }
 
 // 홈에 왔을 때: 접힌 한 줄은 항상, 펼치기는 ① 그날 처음 ② 알림 링크 ③ 한 판 끝내고 돌아왔을 때(잘했어!)
