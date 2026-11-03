@@ -831,7 +831,7 @@ function notifGo(it){
     if (it.go.type === 'stage' && typeof addStageGoTo === 'function') addStageGoTo(it.go.item);
     else if (it.go.type === 'beg' && typeof addGateGoTo === 'function') addGateGoTo(it.go.unitId);
     else if (it.go.type === 'gugu') lrnShowScreen('scr-dan');                       // 구구단 외우기 (단 목록)
-    else if (it.go.type === 'gtest'){ openGuguTestSetup(); gtestPickScope('all', true); }   // 전체 테스트 선택된 상태
+    else if (it.go.type === 'gtest') openGuguTestSetup('all');                      // 구구단 테스트 (전체)
     else if (it.go.type === 'bignum'){                                               // 큰 수 구구 그 단 화면 (잠금 안내 카드와 같은 이동)
       const sel = document.getElementById('app-dan-select');
       if (sel) sel.value = String(it.go.dan);

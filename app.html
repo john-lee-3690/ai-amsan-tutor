@@ -1342,7 +1342,7 @@ body.gqz-kp-big .mnt-key{font-size:clamp(26px,8vw,36px);min-height:56px;}
   <!-- 주의: 서버가 파일별 Last-Modified를 정확히 안 줄 수 있어 document.lastModified 대신
        파일을 만들 때마다 이 문자열을 직접 갱신하는 방식으로 바꿈 (아래 한 줄만 수정하면 됨) -->
   <div id="dev-build-stamp" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
-    font-size:16px;font-weight:700;color:rgba(230,190,110,.7);letter-spacing:.5px;pointer-events:none;z-index:50;">🛠 빌드 2026-11-03 12:10 (KST)</div>
+    font-size:16px;font-weight:700;color:rgba(230,190,110,.7);letter-spacing:.5px;pointer-events:none;z-index:50;">🛠 빌드 2026-11-03 13:10 (KST)</div>
   <!-- // DEV-ONLY 끝 -->
   <div id="sel-title">AI 암산 튜터</div>
   <div id="sel-sub">AI튜터가 가르쳐주는 주산암산 레슨</div>
@@ -2261,7 +2261,10 @@ body.gqz-kp-big .mnt-key{font-size:clamp(26px,8vw,36px);min-height:56px;}
         <div class="mult-gugu-btns" style="display:flex;gap:4px;">
           <button class="mult-sub-btn mult-sub-btn-song" onclick="openGuguSong();event.stopPropagation()">🎵 구구단 노래</button>
           <button class="mult-sub-btn mult-sub-btn-go" onclick="lrnShowScreen('scr-dan');event.stopPropagation()">▶ 구구단 외우기</button>
-          <button class="mult-sub-btn mult-sub-btn-test" onclick="openGuguTestSetup();event.stopPropagation()">⏱ 구구단 테스트</button>
+        </div>
+        <div class="mult-gugu-btns" style="display:flex;gap:4px;">
+          <button class="mult-sub-btn mult-sub-btn-test" onclick="openGuguTestSetup('dan');event.stopPropagation()">⏱ 구구단 테스트 (각 단)</button>
+          <button class="mult-sub-btn mult-sub-btn-test" onclick="openGuguTestSetup('all');event.stopPropagation()">⏱ 구구단 테스트 (전체)</button>
         </div>
       </div>
     </div>
@@ -2594,8 +2597,8 @@ body.gqz-kp-big .mnt-key{font-size:clamp(26px,8vw,36px);min-height:56px;}
 <!-- ── 구구단 테스트: 범위+순서 선택 ── -->
 <div id="scr-gtest-setup" class="screen off">
   <div class="lrn-header">
-    <button class="lrn-back" onclick="lrnShowScreen('scr-dan')">← 뒤로</button>
-    <div class="lrn-title">구구단 테스트</div>
+    <button class="lrn-back" onclick="lrnShowScreen('scr-mult')">← 뒤로</button>
+    <div class="lrn-title" id="gtest-setup-title">구구단 테스트</div>
   </div>
   <div class="gqz-setup-body">
     <div class="gtest-dan-grid" id="gtest-dan-grid">
@@ -4912,7 +4915,7 @@ function multGatePracticeOpen(){ return multGateBigOpen() && !multGateFirstDanTe
 // 잠긴 카드 탭 → 먼저 할 테스트 안내(그림+음성), "이동"하면 그 테스트 화면으로
 function multGateLockedClick(kind){
   if(kind === 'big' || !multGateBigOpen()){
-    return addGateShowCard('⏱', '구구단 전체 테스트 (81문제)', () => { openGuguTestSetup(); gtestPickScope('all', true); });
+    return addGateShowCard('⏱', '구구단 전체 테스트 (81문제)', () => { openGuguTestSetup('all'); });
   }
   const t = multGateFirstDanTest();
   if(!t) return;
@@ -8850,9 +8853,18 @@ function gtestFmtTime(sec){
 
 let gtestSetupScope='all';
 
-function openGuguTestSetup(){
+// mode 'dan' = 각 단(2~9단 중 고르기) / 'all' = 전체(1~9단 · 81문제) — 2026-11-03 곱셈 메뉴에서 버튼 분리
+let gtestSetupMode = 'dan';
+function openGuguTestSetup(mode){
   playTick();
-  gtestPickScope('2', true);
+  gtestSetupMode = (mode === 'all') ? 'all' : 'dan';
+  const all = gtestSetupMode === 'all';
+  const grid = document.getElementById('gtest-dan-grid'), allBtn = document.getElementById('gtest-scope-all');
+  const ttl = document.getElementById('gtest-setup-title');
+  if (grid) grid.style.display = all ? 'none' : '';
+  if (allBtn){ allBtn.style.display = all ? '' : 'none'; allBtn.style.pointerEvents = all ? 'none' : ''; }
+  if (ttl) ttl.textContent = all ? '구구단 테스트 (전체)' : '구구단 테스트 (각 단)';
+  gtestPickScope(all ? 'all' : '2', true);
   lrnShowScreen('scr-gtest-setup');
 }
 
@@ -17819,6 +17831,6 @@ window.addEventListener('resize', flashHandleViewportChange);
 window.addEventListener('orientationchange', flashHandleViewportChange);
 </script>
 <!-- 알림관리 2a: 학습 시작/완료 기록 — 기존 함수는 바깥에서 감싸기만 함, 반드시 맨 끝에서 로드 -->
-<script src="notify-client.js?v=20261103a"></script>
+<script src="notify-client.js?v=20261103b"></script>
 </body>
 </html>
