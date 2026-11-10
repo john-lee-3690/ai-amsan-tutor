@@ -432,10 +432,18 @@ function gradeHomeWatch(){
 //   · 타이머: 남은 시간 → 0 지나면 빨간 "+0:15" (끊지 않음, 시간 넘기면 불합격)
 //   · 나가기: "지금 나가면 이번 판은 무효야" 확인 → 기록 없음
 //   · 끝: 점수·시간·합격 여부 + 틀린 문제 (축하·급수증은 4단계)
-//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판)
+//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판), 곱셈 주산 13급 구구단 섞기(2026-11-10, 키패드)
 // ════════════════════════════════════════════════════════════
 const GX = { on: false, track: null, grade: null, spec: null, mode: null, qs: [], idx: 0, answers: [], start: 0, timer: null, input: '' };
-const GX_TYPES = { '2x1': () => genProblems2x1(20), '3x1': () => genProblems3x1(20, 1), '2x2': () => genProblems2x2(20, 1) };
+// 곱셈 주산 13급: 구구단 1~9단 섞어서 20문제 (같은 문제 겹치지 않게) — 외워서 푸는 문제라 주판 없이 키패드로
+function gxGenGugu20(){
+  const pool = [];
+  for (let a = 1; a <= 9; a++) for (let b = 1; b <= 9; b++) pool.push({ dispA: a, dispB: b, answer: a * b });
+  for (let i = pool.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, 20);
+}
+const GX_TYPES = { gugu20: gxGenGugu20, '2x1': () => genProblems2x1(20), '3x1': () => genProblems3x1(20, 1), '2x2': () => genProblems2x2(20, 1) };
+const GX_KEYPAD_ONLY = { gugu20: true };   // 주산 트랙이어도 주판 없이 키패드로 (시험 규칙 1번)
 function gxSupported(S){ return !!(S && GX_TYPES[S.type] && S.count === 20); }
 function gxGen(S){ return GX_TYPES[S.type]().map(q => ({ a: q.dispA, b: q.dispB, op: '×', ans: q.answer })); }
 
@@ -507,7 +515,7 @@ function gxIntro(track){
     <div class="gx-h">🎯 ${T.label} ${grade}급</div>
     <div class="gx-p">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type])} · ${S.count}문제<br>
       <b>${gradeFmtLimit(S.limit)}</b> 안에 <b>${need}개 이상</b> 맞히면 합격!<br>
-      <small>${T.mode === 'soroban' ? '주판으로 계산하고 ✏️ 칸을 눌러 답을 써.' : '머릿속으로 계산해서 답을 써.'}<br>
+      <small>${GX_KEYPAD_ONLY[S.type] ? '외운 구구단으로 바로 답을 써. 빠르게!' : T.mode === 'soroban' ? '주판으로 계산하고 ✏️ 칸을 눌러 답을 써.' : '머릿속으로 계산해서 답을 써.'}<br>
       문제마다 맞았는지는 끝나고 알려줄게. 중간에 나가면 이번 판은 무효야.</small></div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
       <button class="gx-btn sub" id="gx-cancel">다음에</button><button class="gx-btn" id="gx-go">시작 ▶</button></div></div>`;
@@ -519,7 +527,7 @@ function gxIntro(track){
 // ── 시험 ──
 function gxStart(track, grade){
   const S = gradeSpec(track, grade); if (!gxSupported(S)) return;
-  Object.assign(GX, { on: true, track, grade, spec: S, mode: GRADE_TRACKS[track].mode, qs: gxGen(S), idx: 0, answers: [], input: '' });
+  Object.assign(GX, { on: true, track, grade, spec: S, mode: GX_KEYPAD_ONLY[S.type] ? 'mental' : GRADE_TRACKS[track].mode, qs: gxGen(S), idx: 0, answers: [], input: '' });
   GX.start = Date.now();
   clearInterval(GX.timer); GX.timer = setInterval(gxTick, 250);
   if (GX.mode === 'soroban'){
