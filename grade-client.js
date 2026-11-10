@@ -545,6 +545,10 @@ function gxInjectCss(){
 .gx-va .gx-blank{margin-left:0;border-bottom:none;min-width:2em;text-align:right;}
 .gx-blank{display:inline-block;min-width:2.6em;padding:0 .25em;margin-left:.15em;border-bottom:3px solid #FFD36A;color:#FFD36A;text-align:center;cursor:pointer;}
 .gx-blank.empty{color:rgba(255,211,106,.55);}
+/* 주산 트랙: 답 칸을 버튼처럼 (누르면 키패드) — 2026-11-10 실기기 보고 "키패드가 없네" */
+.gx-blank.gx-tap{border:2px dashed #FFD36A;border-radius:.3em;padding:0 .3em;background:rgba(255,211,106,.12);font-size:.8em;line-height:1.3;animation:gxPulse 1.4s ease-in-out infinite;}
+.gx-blank.gx-tap:not(.empty){border-style:solid;animation:none;font-size:1em;}
+@keyframes gxPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,211,106,.0);}50%{box-shadow:0 0 0 .18em rgba(255,211,106,.35);}}
 #scr-gexam .gx-card{width:min(420px,100%);box-sizing:border-box;padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(74,46,18,.95),rgba(42,26,10,.95));border:1.5px solid rgba(255,217,138,.45);}
 #scr-gexam .gx-h{font-size:20px;font-weight:800;color:var(--go);margin-bottom:8px;}
 #scr-gexam .gx-p{font-size:14.5px;line-height:1.6;color:#FFE9C2;word-break:keep-all;}
@@ -622,7 +626,8 @@ function gxStart(track, grade){
       lrnBuildAbacus(); lrnResetAbacus(true);
       const fb = document.getElementById('lrn-fb'); if (fb) fb.classList.remove('show');
       document.getElementById('lrn-hearts').innerHTML = '<span class="gx-timer" id="gx-timer-l"></span>';
-      document.getElementById('lrn-ctx').textContent = `🏅 ${GRADE_TRACKS[track].label} ${grade}급 도전`;
+      document.getElementById('lrn-ctx').textContent = `🏅 ${GRADE_TRACKS[track].label} ${grade}급 · 주판으로 계산 → ✏️답 누르기`;
+      gxProbTapBind();
       document.getElementById('lrn-hint').style.display = 'none';
       gxShow();
     }));
@@ -639,7 +644,7 @@ function gxTick(){
   const txt = left >= 0 ? `⏱ ${gradeFmtTime(Math.ceil(left / 1000) * 1000)}` : `⏱ +${gradeFmtTime(-left)}`;
   document.querySelectorAll('.gx-timer').forEach(el => { el.textContent = txt; el.classList.toggle('over', left < 0); });
 }
-function gxBlankHtml(){ return `<span class="gx-blank${GX.input ? '' : ' empty'}" id="gx-blank">${GX.input || '✏️'}</span>`; }
+function gxBlankHtml(){ const tap = GX.mode === 'soroban'; return `<span class="gx-blank${GX.input ? '' : ' empty'}${tap ? ' gx-tap' : ''}" id="gx-blank">${GX.input || (tap ? '✏️답' : '✏️')}</span>`; }
 function gxShow(){
   const q = GX.qs[GX.idx], n = GX.qs.length;
   GX.input = '';
@@ -653,6 +658,20 @@ function gxShow(){
     gxKpOpen();
     gxRenderMental();
   }
+}
+// 주산 트랙: 문제 칸 어디를 눌러도 키패드 (손가락이 조금 움직여 click이 안 생기는 경우까지 — touchend에서 바로 열기)
+let gxProbBound = false;
+function gxProbTapBind(){
+  if (gxProbBound) return; gxProbBound = true;
+  const prob = document.getElementById('lrn-prob'); if (!prob) return;
+  let sy = 0, sx = 0;
+  prob.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  prob.addEventListener('touchend', e => {
+    if (!(GX.on && GX.mode === 'soroban')) return;
+    const t = e.changedTouches[0]; if (Math.abs(t.clientX - sx) > 30 || Math.abs(t.clientY - sy) > 30) return;
+    e.preventDefault(); gxKpOpen();
+  }, { passive: false });
+  prob.addEventListener('click', () => { if (GX.on && GX.mode === 'soroban') gxKpOpen(); });
 }
 function gxRenderSoroban(){
   const q = GX.qs[GX.idx]; if (!q) return;
@@ -668,7 +687,7 @@ function gxRenderMental(){
   gxRenderQ(document.getElementById('gx-eq'), q, window.innerWidth - 32, bottom - top - 60, 46);
 }
 function gxRefreshBlank(){
-  const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || '✏️'; b.classList.toggle('empty', !GX.input); }
+  const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || (GX.mode === 'soroban' ? '✏️답' : '✏️'); b.classList.toggle('empty', !GX.input); }
   const v = document.getElementById('gx-kp-val'); if (v) v.textContent = GX.input || ' ';
 }
 
