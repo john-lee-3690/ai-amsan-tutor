@@ -432,7 +432,7 @@ function gradeHomeWatch(){
 //   · 타이머: 남은 시간 → 0 지나면 빨간 "+0:15" (끊지 않음, 시간 넘기면 불합격)
 //   · 나가기: "지금 나가면 이번 판은 무효야" 확인 → 기록 없음
 //   · 끝: 점수·시간·합격 여부 + 틀린 문제 (축하·급수증은 4단계)
-//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판), 곱셈 주산 13급 구구단 섞기(2026-11-10, 키패드)
+//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판), 곱셈 주산 13급 구구단 섞기(2026-11-10, 키패드), 덧뺄셈 주산·암산 16~1급(가로셈·세로셈 반반)
 // ════════════════════════════════════════════════════════════
 const GX = { on: false, track: null, grade: null, spec: null, mode: null, qs: [], idx: 0, answers: [], start: 0, timer: null, input: '' };
 // 곱셈 주산 13급: 구구단 1~9단 섞어서 20문제 (같은 문제 겹치지 않게) — 외워서 푸는 문제라 주판 없이 키패드로
@@ -442,10 +442,88 @@ function gxGenGugu20(){
   for (let i = pool.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   return pool.slice(0, 20);
 }
+// ── 덧뺄셈 문제 (2026-11-10) — 기존 단원 문제(addGenProblems·종합 테스트 풀·flashmathGenProblems)는 가져다 쓰기만, 없는 유형만 새로 ──
+//   반환: 숫자 배열 [첫 수, ±수, ...]  (뺄셈은 음수)
+function gxShuf(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function gxRnd(lo, hi){ return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+function gxPick(pool, n){ const seen = new Set(); const u = pool.filter(q => { const k = q.join(','); if (seen.has(k)) return false; seen.add(k); return true; }); return gxShuf(u).slice(0, n); }   // 같은 문제 겹치지 않게
+function gxPoolOf(ids){ let p = []; ids.forEach(id => { try { p.push(...addGenProblems(id)); } catch(e){} }); return p; }
+function gxUniq(make, n){ const seen = new Set(), out = []; let t = 0; while (out.length < n && t++ < 2000){ const q = make(); const k = q.join(','); if (!seen.has(k)){ seen.add(k); out.push(q); } } return out; }
+function gxFlash(rows, digits, n, mix){
+  return gxUniq(() => {
+    for (let t = 0; t < 50; t++){ const q = flashmathGenSeq(rows, digits, mix ? 'mix' : 'add').nums; if (!mix || q.some(v => v < 0)) return q; }
+    return flashmathGenSeq(rows, digits, 'add').nums;
+  }, n);
+}
+const GX_ADD_GEN = {
+  add1r2_simple:  () => [...gxPick(addGenProblems('add_1_2_1'), 10), ...gxPick(addGenProblems('add_1_2_2'), 10)],
+  add1r3_simple:  () => gxPick(addGenProblems('add_1_2_3'), 20),
+  add2r2_lt50:    () => [...gxPick(addGenProblems('add_1_1_4_1'), 10), ...gxPick(addGenProblems('add_1_1_4_2'), 10)],
+  add1r2_five:    () => {                                   // 새로: 5를 이용 2행 — 덧셈 a<5,b<5,a+b≥5 / 뺄셈 5≤a≤8, b≤4, a-5<b (가능한 조합 전부 = 10 + 10)
+    const A = [], S = [];
+    for (let a = 1; a <= 4; a++) for (let b = 1; b <= 4; b++) if (a + b >= 5) A.push([a, b]);
+    for (let a = 5; a <= 8; a++) for (let b = 1; b <= 4; b++) if (a - 5 < b) S.push([a, -b]);
+    return [...A, ...S];
+  },
+  add1r2_carry:   () => { const ns = [2,3,4,5,6,7,8,9,10];
+    return [...gxPick(gxPoolOf(ns.map(n => `add_1_3_${n}_1`)), 10), ...gxPick(gxPoolOf(ns.map(n => `add_1_3_${n}_2`)), 10)]; },
+  add1r2_fiveten: () => { const ns = [1,2,3,4];
+    return [...gxPick(gxPoolOf(ns.map(n => `add_1_4_${n}_1`)), 10), ...gxPick(gxPoolOf(ns.map(n => `add_1_4_${n}_2`)), 10)]; },
+  add1r3_mix:     () => [...gxPick(finalTestPool12(2), 7), ...gxPick(finalTestPool13(2), 7), ...gxPick(finalTestPool14(2), 6)],
+  add1r4_mix:     () => [...gxPick(finalTestPool12(3), 7), ...gxPick(finalTestPool13(3), 7), ...gxPick(finalTestPool14(3), 6)],
+  add2r2_lt100:   () => [                                   // 새로
+    ...gxUniq(() => { let a, b; do { a = gxRnd(10, 89); b = gxRnd(10, 89); } while (a + b >= 100); return [a, b]; }, 10),
+    ...gxUniq(() => { let a, b; do { a = gxRnd(20, 99); b = gxRnd(10, 98); } while (b >= a); return [a, -b]; }, 10)],
+  add2r2_gt100:   () => [                                   // 새로: 덧셈 합 100 넘음 / 뺄셈 100 넘는 수에서 빼서 100 아래로
+    ...gxUniq(() => { let a, b; do { a = gxRnd(10, 99); b = gxRnd(10, 99); } while (a + b <= 100); return [a, b]; }, 10),
+    ...gxUniq(() => { let a, b; do { a = gxRnd(101, 198); b = gxRnd(10, 99); } while (a - b >= 100); return [a, -b]; }, 10)],
+  add2r3:         () => [...gxFlash(3, 2, 10, false), ...gxFlash(3, 2, 10, true)],
+  add2r4:         () => [...gxFlash(4, 2, 10, false), ...gxFlash(4, 2, 10, true)],
+  add3r2_lt1000:  () => [                                   // 새로
+    ...gxUniq(() => { let a, b; do { a = gxRnd(100, 899); b = gxRnd(100, 899); } while (a + b >= 1000); return [a, b]; }, 10),
+    ...gxUniq(() => { let a, b; do { a = gxRnd(200, 999); b = gxRnd(100, 998); } while (b >= a); return [a, -b]; }, 10)],
+  add3r2_gt1000:  () => [                                   // 새로: 덧셈 합 1000 넘음 / 뺄셈 1000 넘는 수에서 빼서 1000 아래로
+    ...gxUniq(() => { let a, b; do { a = gxRnd(100, 999); b = gxRnd(100, 999); } while (a + b <= 1000); return [a, b]; }, 10),
+    ...gxUniq(() => { let a, b; do { a = gxRnd(1001, 1998); b = gxRnd(100, 999); } while (a - b >= 1000); return [a, -b]; }, 10)],
+  add3r3:         () => [...gxFlash(3, 3, 10, false), ...gxFlash(3, 3, 10, true)],
+  add3r4:         () => [...gxFlash(4, 3, 10, false), ...gxFlash(4, 3, 10, true)],
+};
+// 덧뺄셈은 가로셈·세로셈 반반 (사용자 결정 2026-11-10)
+function gxGenAdd(type){
+  const qs = GX_ADD_GEN[type]().slice(0, 20).map(nums => ({ nums, ans: nums.reduce((x, y) => x + y, 0) }));
+  const lay = gxShuf(qs.map((_, i) => i < Math.ceil(qs.length / 2) ? 'h' : 'v'));
+  return gxShuf(qs).map((q, i) => Object.assign(q, { layout: lay[i] }));
+}
 const GX_TYPES = { gugu20: gxGenGugu20, '2x1': () => genProblems2x1(20), '3x1': () => genProblems3x1(20, 1), '2x2': () => genProblems2x2(20, 1) };
 const GX_KEYPAD_ONLY = { gugu20: true };   // 주산 트랙이어도 주판 없이 키패드로 (시험 규칙 1번)
-function gxSupported(S){ return !!(S && GX_TYPES[S.type] && S.count === 20); }
-function gxGen(S){ return GX_TYPES[S.type]().map(q => ({ a: q.dispA, b: q.dispB, op: '×', ans: q.answer })); }
+function gxSupported(S){ return !!(S && (GX_TYPES[S.type] || GX_ADD_GEN[S.type]) && S.count === 20); }
+function gxGen(S){
+  if (GX_ADD_GEN[S.type]) return gxGenAdd(S.type);
+  return GX_TYPES[S.type]().map(q => ({ a: q.dispA, b: q.dispB, op: '×', ans: q.answer }));
+}
+// ── 문제 그리기: 곱셈 = 가로 한 줄 / 덧뺄셈 = 가로셈(h) 또는 세로셈(v). 주어진 칸에 맞춰 글씨 크기 조절 ──
+const GX_MINUS = '−';
+function gxQText(q){
+  if (q.nums) return q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') + ` = ${q.ans}`;
+  return `${q.a} ${q.op} ${q.b} = ${q.ans}`;
+}
+function gxRenderQ(el, q, availW, availH, maxFs){
+  if (!el) return;
+  el.style.letterSpacing = '0';
+  if (q.nums && q.layout === 'v'){
+    const rows = q.nums.map((v, i) => `<div class="gx-vr"><span class="gx-vs">${i === 0 ? '' : (v < 0 ? GX_MINUS : '+')}</span><span>${Math.abs(v)}</span></div>`).join('');
+    el.innerHTML = `<div class="gx-v">${rows}<div class="gx-vline"></div><div class="gx-vr gx-va">${gxBlankHtml()}</div></div>`;
+    const lines = q.nums.length + 1.4;
+    const chars = Math.max(...q.nums.map(v => String(Math.abs(v)).length)) + 1.6;
+    el.style.fontSize = Math.max(16, Math.min(maxFs, availH / (lines * 1.18), availW / (chars * 0.72))) + 'px';
+  } else {
+    const txt = q.nums ? q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') : `${q.a} ${q.op} ${q.b}`;
+    el.innerHTML = `<span class="gx-h">${txt} = ${gxBlankHtml()}</span>`;
+    const chars = txt.length + 5;
+    el.style.fontSize = Math.max(14, Math.min(maxFs, availW / (chars * 0.6), availH / 1.4)) + 'px';
+  }
+  const b = el.querySelector('#gx-blank'); if (b) b.onclick = () => gxKpOpen();
+}
 
 function gxInjectCss(){
   if (document.getElementById('gx-css')) return;
@@ -459,6 +537,12 @@ function gxInjectCss(){
 #scr-gexam .gx-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 16px;gap:12px;overflow-y:auto;font-family:'Noto Sans KR',sans-serif;color:#FFE9C2;}
 #scr-gexam .gx-prog{font-size:14px;font-weight:700;color:rgba(255,232,160,.8);}
 #scr-gexam .gx-eq{font-size:clamp(30px,10vw,46px);font-weight:800;color:#FFE9C2;white-space:nowrap;}
+.gx-h{white-space:nowrap;}
+.gx-v{display:inline-flex;flex-direction:column;align-items:stretch;font-variant-numeric:tabular-nums;line-height:1.12;}
+.gx-vr{display:flex;justify-content:flex-end;gap:.3em;white-space:nowrap;}
+.gx-vs{min-width:.8em;text-align:left;margin-right:auto;}
+.gx-vline{border-top:3px solid currentColor;margin:.08em 0 .12em;opacity:.8;}
+.gx-va .gx-blank{margin-left:0;border-bottom:none;min-width:2em;text-align:right;}
 .gx-blank{display:inline-block;min-width:2.6em;padding:0 .25em;margin-left:.15em;border-bottom:3px solid #FFD36A;color:#FFD36A;text-align:center;cursor:pointer;}
 .gx-blank.empty{color:rgba(255,211,106,.55);}
 #scr-gexam .gx-card{width:min(420px,100%);box-sizing:border-box;padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(74,46,18,.95),rgba(42,26,10,.95));border:1.5px solid rgba(255,217,138,.45);}
@@ -562,13 +646,26 @@ function gxShow(){
   if (GX.mode === 'soroban'){
     document.getElementById('lrn-prog-text').textContent = `${GX.idx + 1}/${n}`;
     document.getElementById('lrn-prog-fill').style.width = `${(GX.idx / n) * 100}%`;
-    document.getElementById('lrn-eq').innerHTML = `${q.a} ${q.op} ${q.b} = ${gxBlankHtml()}`;
-    document.getElementById('gx-blank').onclick = () => gxKpOpen();
     gxKpHide();
+    gxRenderSoroban();
   } else {
-    document.getElementById('gx-body').innerHTML = `<div class="gx-prog">${GX.idx + 1} / ${n}</div><div class="gx-eq">${q.a} ${q.op} ${q.b} = ${gxBlankHtml()}</div>`;
+    document.getElementById('gx-body').innerHTML = `<div class="gx-prog">${GX.idx + 1} / ${n}</div><div class="gx-eq" id="gx-eq"></div>`;
     gxKpOpen();
+    gxRenderMental();
   }
+}
+function gxRenderSoroban(){
+  const q = GX.qs[GX.idx]; if (!q) return;
+  const prob = document.getElementById('lrn-prob'), ctx = document.getElementById('lrn-ctx');
+  const availH = (prob ? prob.clientHeight : 200) - (ctx ? ctx.offsetHeight + 8 : 20) - 10;
+  gxRenderQ(document.getElementById('lrn-eq'), q, window.innerWidth - 28, availH, 42);
+}
+function gxRenderMental(){
+  const q = GX.qs[GX.idx]; if (!q) return;
+  const body = document.getElementById('gx-body'), kp = document.getElementById('gx-kp');
+  const top = body ? body.getBoundingClientRect().top : 60;
+  const bottom = kp && kp.style.display !== 'none' ? kp.getBoundingClientRect().top : window.innerHeight;
+  gxRenderQ(document.getElementById('gx-eq'), q, window.innerWidth - 32, bottom - top - 60, 46);
 }
 function gxRefreshBlank(){
   const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || '✏️'; b.classList.toggle('empty', !GX.input); }
@@ -687,7 +784,7 @@ async function gxFinish(){
     msg = `${score}개 맞혔어! ${parts.join(', ')} 합격이야.`;
   }
   const wrong = answers.filter(x => !x.ok);
-  const wrongHtml = wrong.length ? `<div class="gx-wrong">틀린 문제<br>${wrong.map(x => `${x.q.a} ${x.q.op} ${x.q.b} = <b>${x.q.ans}</b> <s>(${x.v == null ? '빈칸' : x.v})</s>`).join('<br>')}</div>` : '';
+  const wrongHtml = wrong.length ? `<div class="gx-wrong">틀린 문제<br>${wrong.map(x => `${gradeEsc(gxQText(x.q).replace(/ = \d+$/, ''))} = <b>${x.q.ans}</b> <s>(${x.v == null ? '빈칸' : x.v})</s>`).join('<br>')}</div>` : '';
   document.getElementById('gx-body').innerHTML = `<div class="gx-card">${head}
     <div class="gx-p">${total}문제 중 <b>${score}개</b> 맞힘 (합격 ${need}개)<br>걸린 시간 <b>${gradeFmtTime(elapsed)}</b> (제한 ${gradeFmtLimit(S.limit)})<br>${msg}
     ${r && r.offline ? '<br><small>인터넷이 연결되면 기록을 보낼게.</small>' : ''}</div>${wrongHtml}
@@ -706,6 +803,7 @@ async function gxFinish(){
   } catch(e){}
   // 화면 크기가 바뀌면(회전 등) 키패드 위치 다시
   window.addEventListener('resize', () => setTimeout(() => {
-    if (GX.on){ const kp = document.getElementById('gx-kp'); if (kp && kp.style.display !== 'none') gxKpOpen(); }
-  }, 300));
+    if (GX.on){ const kp = document.getElementById('gx-kp'); if (kp && kp.style.display !== 'none') gxKpOpen();
+      if (GX.mode === 'soroban') gxRenderSoroban(); else gxRenderMental(); }
+  }, 400));
 })();
