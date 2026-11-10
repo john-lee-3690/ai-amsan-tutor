@@ -99,7 +99,7 @@ function gradeState(){
 function gradeSaveState(st){ const sid = gradeSid(); if (!sid) return; try { localStorage.setItem(gradeCacheKey(sid), JSON.stringify(st)); } catch(e){} }
 function gradeFromServer(js){
   const st = gradeEmpty();
-  (js && js.achieved || []).forEach(a => { (st.achieved[a.track] = st.achieved[a.track] || {})[a.grade] = a.achieved_at; });
+  (js && js.achieved || []).forEach(a => { (st.achieved[a.track] = st.achieved[a.track] || {})[a.grade] = a.achieved_at || true; });
   (js && js.progress || []).forEach(p => { (st.progress[p.track] = st.progress[p.track] || {})[p.grade] =
     { days: p.days || 0, tries: p.tries || 0, best_ms: p.best_ms == null ? null : p.best_ms, last_date: p.last_date || null, last_pass_date: p.last_pass_date || null }; });
   return st;
@@ -314,7 +314,8 @@ function gradeCardHtml(track){
 
 function gradeRenderScreen(){
   const list = document.getElementById('grade-list'); if (!list) return;
-  let h = `<div class="grade-intro">바로 다음 급에 도전할 수 있어. 서로 다른 날 정해진 횟수(보통 2번)만큼 합격하면 급이 올라가! 한 번 딴 급은 그대로 남아.</div>`;
+  gsInjectCss();
+  let h = `<button class="gs-open" onclick="openGradeStatus()">📋 내 급수 현황</button><div class="grade-intro">바로 다음 급에 도전할 수 있어. 서로 다른 날 정해진 횟수(보통 2번)만큼 합격하면 급이 올라가! 한 번 딴 급은 그대로 남아.</div>`;
   h += Object.keys(GRADE_TRACKS).map(gradeCardHtml).join('');
   list.innerHTML = h;
 }
@@ -409,13 +410,13 @@ function gradeHomeWatch(){
 (function(){
   let startY = 0, startScroll = 0;
   document.addEventListener('touchstart', function(e){
-    const el = e.target.closest && e.target.closest('#grade-list');
+    const el = e.target.closest && e.target.closest('#grade-list, #gs-list');
     if (!el) return;
     startY = e.touches[0].clientY;
     startScroll = el.scrollTop;
   }, { passive: true });
   document.addEventListener('touchmove', function(e){
-    const el = e.target.closest && e.target.closest('#grade-list');
+    const el = e.target.closest && e.target.closest('#grade-list, #gs-list');
     if (!el) return;
     el.scrollTop = startScroll + (startY - e.touches[0].clientY);
     e.stopPropagation();
@@ -890,3 +891,80 @@ async function gxFinish(){
       if (GX.mode === 'soroban') gxRenderSoroban(); else gxRenderMental(); }
   }, 400));
 })();
+
+
+// ════════════════════════════════════════════════════════════
+// 나의 급수 현황 (2026-11-10) — 급수 도전 화면 [📋 내 급수 현황] → 한 화면에
+//   덧뺄셈 창(주산·암산 칼럼) / 곱셈 창(주산·암산) / 나눗셈 창(암산 칼럼 하나)
+//   칼럼마다: 내 급(메달) · 급 사다리(합격한 급 색칠, 도전 중인 급 테두리) · 도전 중 급 합격 n/필요 · 최고 기록
+// ════════════════════════════════════════════════════════════
+function gsInjectCss(){
+  if (document.getElementById('gs-css')) return;
+  const st = document.createElement('style'); st.id = 'gs-css';
+  st.textContent = `
+.gs-open{display:block;width:100%;font-family:'Noto Sans KR',sans-serif;font-size:15px;font-weight:800;padding:10px;border-radius:12px;cursor:pointer;
+ background:rgba(255,211,106,.14);border:1.5px solid rgba(255,211,106,.6);color:#FFD36A;}
+#scr-gstat{background:var(--bp);}
+#gs-list{flex:1;display:flex;flex-direction:column;gap:12px;padding:12px 12px 76px;overflow-y:auto;touch-action:pan-y;font-family:'Noto Sans KR',sans-serif;color:#FFE9C2;}
+#scr-gstat .gs-panel{border-radius:14px;padding:10px;background:linear-gradient(180deg,rgba(74,46,18,.95),rgba(42,26,10,.95));border:1.5px solid rgba(255,217,138,.45);}
+#scr-gstat .gs-ptitle{font-family:'Noto Serif KR',serif;font-size:17px;font-weight:700;color:var(--go);margin:0 2px 8px;}
+#scr-gstat .gs-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+#scr-gstat .gs-cols.one{grid-template-columns:1fr;}
+#scr-gstat .gs-col{border-radius:12px;padding:8px;background:rgba(0,0,0,.28);border:1px solid rgba(255,217,138,.2);min-width:0;}
+#scr-gstat .gs-cname{font-size:13px;font-weight:700;color:rgba(255,232,160,.75);text-align:center;}
+#scr-gstat .gs-medal{text-align:center;font-size:22px;font-weight:900;color:#FFD36A;margin:2px 0 6px;white-space:nowrap;}
+#scr-gstat .gs-medal.none{font-size:14px;font-weight:700;color:rgba(255,232,160,.55);padding:6px 0;}
+#scr-gstat .gs-ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+#scr-gstat .gs-cols.one .gs-ladder{grid-template-columns:repeat(7,1fr);}
+#scr-gstat .gs-cell{font-size:12px;font-weight:800;text-align:center;padding:5px 0;border-radius:7px;background:rgba(255,255,255,.06);color:rgba(255,232,160,.4);border:1.5px solid transparent;}
+#scr-gstat .gs-cell.got{background:linear-gradient(180deg,#FFD36A,#D89838);color:#2a1600;}
+#scr-gstat .gs-cell.now{border-color:#7EE2A0;color:#7EE2A0;}
+#scr-gstat .gs-info{margin-top:6px;font-size:12px;line-height:1.5;color:#FFE9C2;text-align:center;word-break:keep-all;}
+#scr-gstat .gs-info small{color:rgba(255,232,160,.65);font-size:11.5px;}
+#scr-gstat .gs-legend{font-size:11.5px;color:rgba(255,232,160,.7);text-align:center;}
+#scr-gstat .gs-legend span{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin:0 3px 0 8px;}`;
+  document.head.appendChild(st);
+}
+function gsEnsureScreen(){
+  let scr = document.getElementById('scr-gstat');
+  if (scr) return scr;
+  const ref = document.getElementById('scr-mult') || document.getElementById('scr-sel');
+  if (!ref || !ref.parentNode) return null;
+  gradeInjectCss(); gsInjectCss();
+  scr = document.createElement('div'); scr.id = 'scr-gstat'; scr.className = 'screen off';
+  scr.innerHTML = `<div class="lrn-header"><button class="lrn-back" id="gs-back">← 뒤로</button><div class="lrn-title">📋 내 급수 현황</div></div><div id="gs-list"></div>`;
+  ref.parentNode.appendChild(scr);
+  scr.querySelector('#gs-back').onclick = () => openGradeHome();
+  return scr;
+}
+function gsColHtml(track, name){
+  const T = GRADE_TRACKS[track]; if (!T) return '';
+  const cur = gradeCurrent(track), nx = gradeNext(track);
+  const grades = Object.keys(T.grades).map(Number).sort((a, b) => b - a);
+  const ach = gradeState().achieved[track] || {};
+  const cells = grades.map(g => `<div class="gs-cell${ach[g] || (cur != null && g >= cur) ? ' got' : g === nx ? ' now' : ''}">${g}</div>`).join('');
+  let info = '';
+  if (nx == null) info = '🎉 1급까지 모두 합격!';
+  else {
+    const S = gradeSpec(track, nx), P = gradeProgress(track, nx);
+    info = `도전 중 <b>${nx}급</b> · 합격 ${Math.min(P.days || 0, S.need)}/${S.need}`;
+    if (P.best_ms != null) info += `<br><small>최고 기록 ${gradeFmtTime(P.best_ms)} (제한 ${gradeFmtLimit(S.limit)})</small>`;
+  }
+  return `<div class="gs-col"><div class="gs-cname">${name}</div>`
+    + (cur == null ? `<div class="gs-medal none">아직 급 없음</div>` : `<div class="gs-medal">🏅 ${cur}급</div>`)
+    + `<div class="gs-ladder">${cells}</div><div class="gs-info">${info}</div></div>`;
+}
+function gsRender(){
+  const list = document.getElementById('gs-list'); if (!list) return;
+  list.innerHTML = `<div class="gs-legend"><span style="background:#E8B450"></span>합격한 급<span style="border:1.5px solid #7EE2A0"></span>도전 중</div>`
+    + `<div class="gs-panel"><div class="gs-ptitle">➕➖ 덧뺄셈</div><div class="gs-cols">${gsColHtml('add_soroban', '주산')}${gsColHtml('add_mental', '암산')}</div></div>`
+    + `<div class="gs-panel"><div class="gs-ptitle">✖️ 곱셈</div><div class="gs-cols">${gsColHtml('mult_soroban', '주산')}${gsColHtml('mult_mental', '암산')}</div></div>`
+    + `<div class="gs-panel"><div class="gs-ptitle">➗ 나눗셈</div><div class="gs-cols one">${gsColHtml('div', '암산')}</div></div>`;
+}
+function openGradeStatus(){
+  if (!gsEnsureScreen()) return;
+  try { playTick(); } catch(e){}
+  gsRender();
+  lrnShowScreen('scr-gstat');
+  gradeLoad().then(() => { const s = document.getElementById('scr-gstat'); if (s && !s.classList.contains('off')) gsRender(); }).catch(() => {});
+}
