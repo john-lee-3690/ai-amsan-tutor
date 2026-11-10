@@ -518,7 +518,7 @@ function gxRenderQ(el, q, availW, availH, maxFs){
     el.style.fontSize = Math.max(16, Math.min(maxFs, availH / (lines * 1.18), availW / (chars * 0.72))) + 'px';
   } else {
     const txt = q.nums ? q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') : `${q.a} ${q.op} ${q.b}`;
-    el.innerHTML = `<span class="gx-h">${txt} = ${gxBlankHtml()}</span>`;
+    el.innerHTML = `<span class="gx-hz">${txt} = ${gxBlankHtml()}</span>`;   // (gx-h는 시작 안내 제목 class라 이름 겹치지 않게)
     const chars = txt.length + 5;
     el.style.fontSize = Math.max(14, Math.min(maxFs, availW / (chars * 0.6), availH / 1.4)) + 'px';
   }
@@ -537,7 +537,7 @@ function gxInjectCss(){
 #scr-gexam .gx-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 16px;gap:12px;overflow-y:auto;font-family:'Noto Sans KR',sans-serif;color:#FFE9C2;}
 #scr-gexam .gx-prog{font-size:14px;font-weight:700;color:rgba(255,232,160,.8);}
 #scr-gexam .gx-eq{font-size:clamp(30px,10vw,46px);font-weight:800;color:#FFE9C2;white-space:nowrap;}
-.gx-h{white-space:nowrap;}
+.gx-hz{white-space:nowrap;}
 .gx-v{display:inline-flex;flex-direction:column;align-items:stretch;font-variant-numeric:tabular-nums;line-height:1.12;}
 .gx-vr{display:flex;justify-content:flex-end;gap:.3em;white-space:nowrap;}
 .gx-vs{min-width:.8em;text-align:left;margin-right:auto;}
