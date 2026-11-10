@@ -697,8 +697,9 @@ function gxRenderMental(){
   gxRenderQ(document.getElementById('gx-eq'), q, window.innerWidth - 32, bottom - top - 60, 46);
 }
 function gxRefreshBlank(){
-  const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || (GX.mode === 'soroban' ? '?' : '✏️'); b.classList.toggle('empty', !GX.input); }
-  const v = document.getElementById('gx-kp-val'); if (v) v.textContent = GX.input || ' ';
+  // 화면마다 답 칸이 따로 있어서(숨은 학습 화면에 예전 칸이 남을 수 있음) 지금 화면 것만
+  const b = document.querySelector(GX.mode === 'soroban' ? '#lrn-eq #gx-blank' : '#gx-eq #gx-blank'); if (b){ b.textContent = GX.input || (GX.mode === 'soroban' ? '?' : '✏️'); b.classList.toggle('empty', !GX.input); }
+
 }
 
 // ── 키패드 (시험 전용 — 기존 공용 키패드와 따로) ──
@@ -739,7 +740,7 @@ function gxKpOpen(){
     const body = document.getElementById('gx-body'); if (body) body.style.paddingBottom = h + 'px';
   }
   kp.style.height = h + 'px';
-  document.getElementById('gx-kp-close').style.display = GX.mode === 'soroban' ? '' : 'none';
+  const bar = kp.querySelector('.gx-kp-bar'); if (bar) bar.style.display = 'none';   // 답은 문제의 답 칸에만 표시
   kp.style.display = 'flex';
   gxRefreshBlank();
 }
@@ -780,6 +781,7 @@ function gxCleanup(){
   const body = document.getElementById('gx-body'); if (body) body.style.paddingBottom = '';
   const hint = document.getElementById('lrn-hint'); if (hint) hint.style.display = '';   // 학습 화면 원래대로
   gxStripRemove();
+  document.querySelectorAll('[id="gx-blank"]').forEach(el => el.removeAttribute('id'));   // 다음 판에 예전 답 칸이 잡히지 않게
   const c = document.getElementById('gx-confirm'); if (c) c.remove();
 }
 
