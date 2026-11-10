@@ -522,7 +522,7 @@ function gxRenderQ(el, q, availW, availH, maxFs){
     const chars = txt.length + 5;
     el.style.fontSize = Math.max(14, Math.min(maxFs, availW / (chars * 0.6), availH / 1.4)) + 'px';
   }
-  const b = el.querySelector('#gx-blank'); if (b) b.onclick = () => gxKpOpen();
+  const b = el.querySelector('#gx-blank'); if (b && GX.mode !== 'soroban') b.onclick = () => gxKpOpen();
 }
 
 function gxInjectCss(){
@@ -548,6 +548,11 @@ function gxInjectCss(){
 /* 주산 트랙: 답 칸을 버튼처럼 (누르면 키패드) — 2026-11-10 실기기 보고 "키패드가 없네" */
 .gx-blank.gx-tap{border:2px dashed #FFD36A;border-radius:.3em;padding:0 .3em;background:rgba(255,211,106,.12);font-size:.8em;line-height:1.3;animation:gxPulse 1.4s ease-in-out infinite;}
 .gx-blank.gx-tap:not(.empty){border-style:solid;animation:none;font-size:1em;}
+#gx-strip{margin-top:auto;width:100%;box-sizing:border-box;padding:6px 8px 8px;display:grid;grid-template-columns:repeat(6,1fr);gap:6px;touch-action:none;}
+#gx-strip .gx-k{font-family:'Noto Sans KR',sans-serif;font-size:clamp(18px,5.6vw,24px);font-weight:800;height:clamp(38px,6.2vh,50px);border-radius:10px;border:1px solid rgba(255,217,138,.3);
+ background:linear-gradient(180deg,#6A4420,#4A2E14);color:#FFE9C2;padding:0;letter-spacing:0;}
+#gx-strip .gx-k.ok{background:linear-gradient(180deg,#5AE08A,#2E9A55);color:#08200F;font-size:clamp(15px,4.4vw,19px);}
+#gx-strip .gx-k:active{filter:brightness(1.3);}
 @keyframes gxPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,211,106,.0);}50%{box-shadow:0 0 0 .18em rgba(255,211,106,.35);}}
 #scr-gexam .gx-card{width:min(420px,100%);box-sizing:border-box;padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(74,46,18,.95),rgba(42,26,10,.95));border:1.5px solid rgba(255,217,138,.45);}
 #scr-gexam .gx-h{font-size:20px;font-weight:800;color:var(--go);margin-bottom:8px;}
@@ -626,8 +631,8 @@ function gxStart(track, grade){
       lrnBuildAbacus(); lrnResetAbacus(true);
       const fb = document.getElementById('lrn-fb'); if (fb) fb.classList.remove('show');
       document.getElementById('lrn-hearts').innerHTML = '<span class="gx-timer" id="gx-timer-l"></span>';
-      document.getElementById('lrn-ctx').textContent = `🏅 ${GRADE_TRACKS[track].label} ${grade}급 · 주판으로 계산 → ✏️답 누르기`;
-      gxProbTapBind();
+      document.getElementById('lrn-ctx').textContent = `🏅 ${GRADE_TRACKS[track].label} ${grade}급`;
+      gxStripEnsure();
       document.getElementById('lrn-hint').style.display = 'none';
       gxShow();
     }));
@@ -644,14 +649,13 @@ function gxTick(){
   const txt = left >= 0 ? `⏱ ${gradeFmtTime(Math.ceil(left / 1000) * 1000)}` : `⏱ +${gradeFmtTime(-left)}`;
   document.querySelectorAll('.gx-timer').forEach(el => { el.textContent = txt; el.classList.toggle('over', left < 0); });
 }
-function gxBlankHtml(){ const tap = GX.mode === 'soroban'; return `<span class="gx-blank${GX.input ? '' : ' empty'}${tap ? ' gx-tap' : ''}" id="gx-blank">${GX.input || (tap ? '✏️답' : '✏️')}</span>`; }
+function gxBlankHtml(){ const tap = false; return `<span class="gx-blank${GX.input ? '' : ' empty'}${tap ? ' gx-tap' : ''}" id="gx-blank">${GX.input || (GX.mode === 'soroban' ? '?' : '✏️')}</span>`; }
 function gxShow(){
   const q = GX.qs[GX.idx], n = GX.qs.length;
   GX.input = '';
   if (GX.mode === 'soroban'){
     document.getElementById('lrn-prog-text').textContent = `${GX.idx + 1}/${n}`;
     document.getElementById('lrn-prog-fill').style.width = `${(GX.idx / n) * 100}%`;
-    gxKpHide();
     gxRenderSoroban();
   } else {
     document.getElementById('gx-body').innerHTML = `<div class="gx-prog">${GX.idx + 1} / ${n}</div><div class="gx-eq" id="gx-eq"></div>`;
@@ -659,25 +663,31 @@ function gxShow(){
     gxRenderMental();
   }
 }
-// 주산 트랙: 문제 칸 어디를 눌러도 키패드 (손가락이 조금 움직여 click이 안 생기는 경우까지 — touchend에서 바로 열기)
-let gxProbBound = false;
-function gxProbTapBind(){
-  if (gxProbBound) return; gxProbBound = true;
+// 주산 트랙: 문제를 위로 올리고, 문제 칸 아래쪽에 숫자 키 두 줄을 항상 (주판은 그대로) — 2026-11-10 사용자 요청
+function gxStripEnsure(){
   const prob = document.getElementById('lrn-prob'); if (!prob) return;
-  let sy = 0, sx = 0;
-  prob.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
-  prob.addEventListener('touchend', e => {
-    if (!(GX.on && GX.mode === 'soroban')) return;
-    const t = e.changedTouches[0]; if (Math.abs(t.clientX - sx) > 30 || Math.abs(t.clientY - sy) > 30) return;
-    e.preventDefault(); gxKpOpen();
-  }, { passive: false });
-  prob.addEventListener('click', () => { if (GX.on && GX.mode === 'soroban') gxKpOpen(); });
+  prob.style.justifyContent = 'flex-start'; prob.style.paddingTop = '6px';
+  let st = document.getElementById('gx-strip');
+  if (!st){
+    st = document.createElement('div'); st.id = 'gx-strip';
+    st.innerHTML = [1,2,3,4,5,6,7,8,9,0].map(d => `<button class="gx-k" data-k="${d}">${d}</button>`).join('')
+      + `<button class="gx-k del" data-k="del">⌫</button><button class="gx-k ok" data-k="ok">확인</button>`;
+    st.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); const b = e.target.closest('button'); if (b) gxKey(b.dataset.k); }, { passive: false });
+    ['touchmove', 'touchend'].forEach(ev => st.addEventListener(ev, e => { e.stopPropagation(); e.preventDefault(); }, { passive: false }));
+    st.addEventListener('mousedown', e => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); gxKey(b.dataset.k); });
+    st.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+  }
+  prob.appendChild(st);
+}
+function gxStripRemove(){
+  const st = document.getElementById('gx-strip'); if (st) st.remove();
+  const prob = document.getElementById('lrn-prob'); if (prob){ prob.style.justifyContent = ''; prob.style.paddingTop = ''; }
 }
 function gxRenderSoroban(){
   const q = GX.qs[GX.idx]; if (!q) return;
-  const prob = document.getElementById('lrn-prob'), ctx = document.getElementById('lrn-ctx');
-  const availH = (prob ? prob.clientHeight : 200) - (ctx ? ctx.offsetHeight + 8 : 20) - 10;
-  gxRenderQ(document.getElementById('lrn-eq'), q, window.innerWidth - 28, availH, 42);
+  const prob = document.getElementById('lrn-prob'), ctx = document.getElementById('lrn-ctx'), st = document.getElementById('gx-strip');
+  const availH = (prob ? prob.clientHeight : 200) - (ctx ? ctx.offsetHeight + 4 : 20) - (st ? st.offsetHeight : 0) - 14;
+  gxRenderQ(document.getElementById('lrn-eq'), q, window.innerWidth - 28, availH, 52);
 }
 function gxRenderMental(){
   const q = GX.qs[GX.idx]; if (!q) return;
@@ -687,7 +697,7 @@ function gxRenderMental(){
   gxRenderQ(document.getElementById('gx-eq'), q, window.innerWidth - 32, bottom - top - 60, 46);
 }
 function gxRefreshBlank(){
-  const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || (GX.mode === 'soroban' ? '✏️답' : '✏️'); b.classList.toggle('empty', !GX.input); }
+  const b = document.getElementById('gx-blank'); if (b){ b.textContent = GX.input || (GX.mode === 'soroban' ? '?' : '✏️'); b.classList.toggle('empty', !GX.input); }
   const v = document.getElementById('gx-kp-val'); if (v) v.textContent = GX.input || ' ';
 }
 
@@ -769,6 +779,7 @@ function gxCleanup(){
   gxKpHide();
   const body = document.getElementById('gx-body'); if (body) body.style.paddingBottom = '';
   const hint = document.getElementById('lrn-hint'); if (hint) hint.style.display = '';   // 학습 화면 원래대로
+  gxStripRemove();
   const c = document.getElementById('gx-confirm'); if (c) c.remove();
 }
 
