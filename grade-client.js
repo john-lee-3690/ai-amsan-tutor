@@ -432,7 +432,7 @@ function gradeHomeWatch(){
 //   · 타이머: 남은 시간 → 0 지나면 빨간 "+0:15" (끊지 않음, 시간 넘기면 불합격)
 //   · 나가기: "지금 나가면 이번 판은 무효야" 확인 → 기록 없음
 //   · 끝: 점수·시간·합격 여부 + 틀린 문제 (축하·급수증은 4단계)
-//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판), 곱셈 주산 13급 구구단 섞기(2026-11-10, 키패드), 덧뺄셈 주산·암산 16~1급(가로셈·세로셈 반반)
+//   이번에 여는 유형: 곱셈 2×1 · 3×1 · 2×2 (랜덤 판), 곱셈 주산 13급 구구단 섞기(2026-11-10, 키패드), 덧뺄셈 주산·암산 16~1급(가로셈·세로셈 반반), 나눗셈 14~1급(나머지 = 몫 → 나머지 차례로)
 // ════════════════════════════════════════════════════════════
 const GX = { on: false, track: null, grade: null, spec: null, mode: null, qs: [], idx: 0, answers: [], start: 0, timer: null, input: '' };
 // 곱셈 주산 13급: 구구단 1~9단 섞어서 20문제 (같은 문제 겹치지 않게) — 외워서 푸는 문제라 주판 없이 키패드로
@@ -494,15 +494,53 @@ function gxGenAdd(type){
   const lay = gxShuf(qs.map((_, i) => i < Math.ceil(qs.length / 2) ? 'h' : 'v'));
   return gxShuf(qs).map((q, i) => Object.assign(q, { layout: lay[i] }));
 }
+// ── 나눗셈 문제 (2026-11-10) — 전부 새로 (기존 나눗셈 단원 코드는 건드리지 않음). 나머지 있는 급은 모든 문제에 나머지 ──
+//   반환: { a(나뉠 수), d(나누는 수), q(몫), r(나머지) }
+function gxDivMake(dLo, dHi, qLo, qHi, aLo, aHi, withR){
+  for (let t = 0; t < 500; t++){
+    const d = gxRnd(dLo, dHi); if (dHi > 9 && d % 10 === 0) continue;        // 두 자리로 나눌 때 몇십(20, 30…)은 빼기
+    // 나누는 수를 먼저 고르고, 그 수로 가능한 몫 범위 안에서 고름 (큰 수로 나누는 문제가 덜 나오는 치우침 방지)
+    const qmin = Math.max(qLo, Math.ceil((aLo - (withR ? d - 1 : 0)) / d)), qmax = Math.min(qHi, Math.floor((aHi - (withR ? 1 : 0)) / d));
+    if (qmin > qmax) continue;
+    const q = gxRnd(qmin, qmax), r = withR ? gxRnd(1, d - 1) : 0, a = d * q + r;
+    if (a >= aLo && a <= aHi) return { a, d, q, r };
+  }
+  return null;
+}
+function gxDivSet(n, specs){   // specs: [[개수, dLo,dHi,qLo,qHi,aLo,aHi,withR], ...] — 한 판 안 같은 문제 없음
+  const seen = new Set(), out = [];
+  specs.forEach(([cnt, ...a]) => { let t = 0, got = 0;
+    while (got < cnt && t++ < 3000){ const x = gxDivMake(...a); if (!x) continue; const k = x.a + '/' + x.d; if (seen.has(k)) continue; seen.add(k); out.push(x); got++; } });
+  return gxShuf(out).slice(0, n);
+}
+const GX_DIV_GEN = {
+  div_gugu:   () => gxDivSet(20, [[20, 2, 9, 1, 9, 1, 81, false]]),
+  div_gugu_r: () => gxDivSet(20, [[20, 2, 9, 1, 9, 1, 89, true]]),
+  div21_q2:   () => gxDivSet(20, [[20, 2, 9, 10, 49, 10, 99, false]]),
+  div21_q2_r: () => gxDivSet(20, [[20, 2, 9, 10, 49, 10, 99, true]]),
+  div31_q2:   () => gxDivSet(20, [[20, 2, 9, 12, 99, 100, 999, false]]),
+  div31_q3:   () => gxDivSet(20, [[20, 2, 9, 100, 499, 100, 999, false]]),
+  div31_r:    () => gxDivSet(20, [[10, 2, 9, 12, 99, 100, 999, true], [10, 2, 9, 100, 499, 100, 999, true]]),
+  div32_q1:   () => gxDivSet(20, [[20, 11, 99, 2, 9, 100, 999, false]]),
+  div32_q2:   () => gxDivSet(20, [[20, 11, 99, 10, 90, 100, 999, false]]),
+  div32_r:    () => gxDivSet(20, [[10, 11, 99, 2, 9, 100, 999, true], [10, 11, 99, 10, 90, 100, 999, true]]),
+  div42:      () => gxDivSet(20, [[10, 11, 99, 11, 99, 1000, 9999, false], [10, 11, 99, 100, 909, 1000, 9999, false]]),   // 몫 두·세 자리 반반
+  div42_r:    () => gxDivSet(20, [[10, 11, 99, 11, 99, 1000, 9999, true], [10, 11, 99, 100, 909, 1000, 9999, true]]),
+  div52:      () => gxDivSet(20, [[10, 11, 99, 102, 999, 10000, 99999, false], [10, 11, 99, 1000, 9090, 10000, 99999, false]]), // 몫 세·네 자리 반반
+  div52_r:    () => gxDivSet(20, [[10, 11, 99, 102, 999, 10000, 99999, true], [10, 11, 99, 1000, 9090, 10000, 99999, true]]),
+};
 const GX_TYPES = { gugu20: gxGenGugu20, '2x1': () => genProblems2x1(20), '3x1': () => genProblems3x1(20, 1), '2x2': () => genProblems2x2(20, 1) };
 const GX_KEYPAD_ONLY = { gugu20: true };   // 주산 트랙이어도 주판 없이 키패드로 (시험 규칙 1번)
-function gxSupported(S){ return !!(S && (GX_TYPES[S.type] || GX_ADD_GEN[S.type]) && S.count === 20); }
+function gxSupported(S){ return !!(S && (GX_TYPES[S.type] || GX_ADD_GEN[S.type] || GX_DIV_GEN[S.type]) && S.count === 20); }
 function gxGen(S){
   if (GX_ADD_GEN[S.type]) return gxGenAdd(S.type);
+  if (GX_DIV_GEN[S.type]) return GX_DIV_GEN[S.type]().map(x => ({ div: true, a: x.a, b: x.d, op: '÷', ans: x.q, rem: x.r, hasR: x.r > 0, layout: 'h' }));
   return GX_TYPES[S.type]().map(q => ({ a: q.dispA, b: q.dispB, op: '×', ans: q.answer }));
 }
 // ── 문제 그리기: 곱셈 = 가로 한 줄 / 덧뺄셈 = 가로셈(h) 또는 세로셈(v). 주어진 칸에 맞춰 글씨 크기 조절 ──
 const GX_MINUS = '−';
+function gxQAsk(q){ return q.nums ? q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') : `${q.a} ${q.op} ${q.b}`; }
+function gxAnsText(q){ return q.hasR ? `${q.ans} ··· ${q.rem}` : String(q.ans); }
 function gxQText(q){
   if (q.nums) return q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') + ` = ${q.ans}`;
   return `${q.a} ${q.op} ${q.b} = ${q.ans}`;
@@ -516,6 +554,14 @@ function gxRenderQ(el, q, availW, availH, maxFs){
     const lines = q.nums.length + 1.4;
     const chars = Math.max(...q.nums.map(v => String(Math.abs(v)).length)) + 1.6;
     el.style.fontSize = Math.max(16, Math.min(maxFs, availH / (lines * 1.18), availW / (chars * 0.72))) + 'px';
+  } else if (q.div && q.hasR){
+    // 나머지 있는 나눗셈: 몫 칸 → 나머지 칸 차례로 (지금 넣는 칸만 id gx-blank)
+    const qb = GX.stage === 'r' ? `<span class="gx-blank">${GX.qv == null ? '·' : GX.qv}</span>` : gxBlankHtml();
+    const rb = GX.stage === 'r' ? gxBlankHtml() : `<span class="gx-blank empty" style="opacity:.45">□</span>`;
+    const txt = `${q.a} ÷ ${q.b}`;
+    el.innerHTML = `<span class="gx-hz">${txt} = ${qb}<span style="margin:0 .15em">···</span>${rb}</span>`;
+    const chars = txt.length + 10;
+    el.style.fontSize = Math.max(14, Math.min(maxFs, availW / (chars * 0.7), availH / 1.4)) + 'px';
   } else {
     const txt = q.nums ? q.nums.map((v, i) => i === 0 ? String(v) : (v < 0 ? ` ${GX_MINUS} ${-v}` : ` + ${v}`)).join('') : `${q.a} ${q.op} ${q.b}`;
     el.innerHTML = `<span class="gx-hz">${txt} = ${gxBlankHtml()}</span>`;   // (gx-h는 시작 안내 제목 class라 이름 겹치지 않게)
@@ -652,7 +698,7 @@ function gxTick(){
 function gxBlankHtml(){ const tap = false; return `<span class="gx-blank${GX.input ? '' : ' empty'}${tap ? ' gx-tap' : ''}" id="gx-blank">${GX.input || (GX.mode === 'soroban' ? '?' : '✏️')}</span>`; }
 function gxShow(){
   const q = GX.qs[GX.idx], n = GX.qs.length;
-  GX.input = '';
+  GX.input = ''; GX.stage = 'q'; GX.qv = null;
   if (GX.mode === 'soroban'){
     document.getElementById('lrn-prog-text').textContent = `${GX.idx + 1}/${n}`;
     document.getElementById('lrn-prog-fill').style.width = `${(GX.idx / n) * 100}%`;
@@ -748,7 +794,10 @@ function gxKpHide(){ const kp = document.getElementById('gx-kp'); if (kp) kp.sty
 function gxKey(k){
   if (!GX.on) return;
   try { playTick(); } catch(e){}
-  if (k === 'del') GX.input = GX.input.slice(0, -1);
+  if (k === 'del'){
+    if (GX.input === '' && GX.stage === 'r'){ GX.stage = 'q'; GX.input = GX.qv == null ? '' : String(GX.qv); GX.qv = null; return gxRenderMental(); }   // 나머지 칸이 비었을 때 ⌫ → 몫 고치기
+    GX.input = GX.input.slice(0, -1);
+  }
   else if (k === 'ok') return gxSubmit();
   else if (GX.input.length < 6) GX.input = (GX.input === '0' ? '' : GX.input) + k;
   gxRefreshBlank();
@@ -756,7 +805,9 @@ function gxKey(k){
 function gxSubmit(){
   const q = GX.qs[GX.idx];
   const v = GX.input === '' ? null : parseInt(GX.input, 10);
-  GX.answers.push({ q, v, ok: v === q.ans });                 // 정오 표시 없이 바로 다음
+  if (q.hasR && GX.stage !== 'r'){ GX.qv = v; GX.stage = 'r'; GX.input = ''; gxRenderMental(); return; }   // 몫 → 나머지 칸으로
+  if (q.hasR) GX.answers.push({ q, v: GX.qv, rv: v, ok: GX.qv === q.ans && v === q.rem });
+  else GX.answers.push({ q, v, ok: v === q.ans });            // 정오 표시 없이 바로 다음
   GX.idx++;
   if (GX.idx >= GX.qs.length) return gxFinish();
   if (GX.mode === 'soroban'){ try { lrnResetAbacus(true); } catch(e){} }
@@ -816,7 +867,7 @@ async function gxFinish(){
     msg = `${score}개 맞혔어! ${parts.join(', ')} 합격이야.`;
   }
   const wrong = answers.filter(x => !x.ok);
-  const wrongHtml = wrong.length ? `<div class="gx-wrong">틀린 문제<br>${wrong.map(x => `${gradeEsc(gxQText(x.q).replace(/ = \d+$/, ''))} = <b>${x.q.ans}</b> <s>(${x.v == null ? '빈칸' : x.v})</s>`).join('<br>')}</div>` : '';
+  const wrongHtml = wrong.length ? `<div class="gx-wrong">틀린 문제<br>${wrong.map(x => `${gradeEsc(gxQAsk(x.q))} = <b>${gxAnsText(x.q)}</b> <s>(${x.v == null ? '빈칸' : x.v}${x.q.hasR ? ' ··· ' + (x.rv == null ? '빈칸' : x.rv) : ''})</s>`).join('<br>')}</div>` : '';
   document.getElementById('gx-body').innerHTML = `<div class="gx-card">${head}
     <div class="gx-p">${total}문제 중 <b>${score}개</b> 맞힘 (합격 ${need}개)<br>걸린 시간 <b>${gradeFmtTime(elapsed)}</b> (제한 ${gradeFmtLimit(S.limit)})<br>${msg}
     ${r && r.offline ? '<br><small>인터넷이 연결되면 기록을 보낼게.</small>' : ''}</div>${wrongHtml}
