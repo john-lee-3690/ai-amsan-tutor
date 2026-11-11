@@ -867,14 +867,18 @@ async function gxFinish(){
     if (!timeOk) parts.push(`시간만 ${gradeFmtTime(elapsed - S.limit * 1000)} 줄이면`);
     msg = `${score}개 맞혔어! ${parts.join(', ')} 합격이야.`;
   }
+  // 내 기록과 비교 (합격 개수 이상 맞힌 판끼리) — "지난번보다 빨라졌어"
+  const prevBest = r && r.prevBest != null ? r.prevBest : null;
+  const faster = (scoreOk && prevBest != null && elapsed < prevBest) ? `<br>⚡ 내 최고 기록보다 <b>${gradeFmtTime(prevBest - elapsed)}</b> 빨라졌어!` : '';
   const wrong = answers.filter(x => !x.ok);
   const wrongHtml = wrong.length ? `<div class="gx-wrong">틀린 문제<br>${wrong.map(x => `${gradeEsc(gxQAsk(x.q))} = <b>${gxAnsText(x.q)}</b> <s>(${x.v == null ? '빈칸' : x.v}${x.q.hasR ? ' ··· ' + (x.rv == null ? '빈칸' : x.rv) : ''})</s>`).join('<br>')}</div>` : '';
   document.getElementById('gx-body').innerHTML = `<div class="gx-card">${head}
     <div class="gx-p">${total}문제 중 <b>${score}개</b> 맞힘 (합격 ${need}개)<br>걸린 시간 <b>${gradeFmtTime(elapsed)}</b> (제한 ${gradeFmtLimit(S.limit)})<br>${msg}
-    ${r && r.offline ? '<br><small>인터넷이 연결되면 기록을 보낼게.</small>' : ''}</div>${wrongHtml}
+    ${faster}${r && r.offline ? '<br><small>인터넷이 연결되면 기록을 보낼게.</small>' : ''}</div>${wrongHtml}
     <div style="text-align:center;margin-top:14px"><button class="gx-btn" id="gx-done">확인</button></div></div>`;
   document.getElementById('gx-done').onclick = () => openGradeHome();
-  try { (passed ? playDing : playTick)(); } catch(e){}
+  if (passed && r && r.promoted) gxCelebrate(track, grade);          // 4단계: 급이 오른 순간 축하
+  else { try { (passed ? playDing : playTick)(); } catch(e){} }
 }
 
 // 시험 중에는 학습 주판의 자동 판정을 끄고, 학습 화면 ← 나가기는 무효 확인으로 (기존 함수는 그대로 두고 감쌈)
@@ -967,4 +971,44 @@ function openGradeStatus(){
   gsRender();
   lrnShowScreen('scr-gstat');
   gradeLoad().then(() => { const s = document.getElementById('scr-gstat'); if (s && !s.classList.contains('off')) gsRender(); }).catch(() => {});
+}
+
+
+// ════════════════════════════════════════════════════════════
+// 4단계 (2026-11-11) — 승급 축하 화면: 메달 · 팡파르 · 색종이 · "다음 도전" 안내 (급수증은 보류)
+// ════════════════════════════════════════════════════════════
+function gxCelebrate(track, grade){
+  gxInjectCss();
+  if (!document.getElementById('gx-cele-css')){
+    const st = document.createElement('style'); st.id = 'gx-cele-css';
+    st.textContent = `
+#gx-cele{position:fixed;inset:0;z-index:10002;background:radial-gradient(ellipse at 50% 40%,#5A320A,#0A0502);display:flex;align-items:center;justify-content:center;font-family:'Noto Sans KR',sans-serif;}
+#gx-cele .gc-box{width:min(360px,calc(100% - 32px));text-align:center;color:#FFE9C2;}
+#gx-cele .gc-medal{font-size:clamp(84px,28vw,120px);line-height:1;animation:gxMedalIn .9s cubic-bezier(.2,1.6,.4,1) both, gxMedalGlow 1.8s ease-in-out .9s infinite;}
+#gx-cele .gc-t{margin-top:10px;font-size:clamp(22px,7vw,30px);font-weight:900;color:#FFD36A;word-break:keep-all;animation:gxFadeUp .5s ease .5s both;}
+#gx-cele .gc-s{margin-top:6px;font-size:15px;line-height:1.6;color:#FFE9C2;word-break:keep-all;animation:gxFadeUp .5s ease .7s both;}
+#gx-cele .gc-next{margin:16px auto 0;padding:12px;border-radius:14px;background:rgba(0,0,0,.35);border:1.5px solid rgba(126,226,160,.6);font-size:14.5px;line-height:1.6;word-break:keep-all;animation:gxFadeUp .5s ease .9s both;}
+#gx-cele .gc-next b{color:#7EE2A0;}
+#gx-cele .gx-btn{margin-top:18px;animation:gxFadeUp .5s ease 1.1s both;}
+@keyframes gxMedalIn{0%{transform:scale(.2) rotate(-25deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes gxMedalGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(255,211,106,0))}50%{filter:drop-shadow(0 0 18px rgba(255,211,106,.8))}}
+@keyframes gxFadeUp{0%{transform:translateY(12px);opacity:0}100%{transform:none;opacity:1}}`;
+    document.head.appendChild(st);
+  }
+  const T = GRADE_TRACKS[track], S = gradeSpec(track, grade);
+  const nx = grade > 1 ? grade - 1 : null, NS = nx ? gradeSpec(track, nx) : null;
+  const nextHtml = NS
+    ? `다음 도전: <b>${nx}급</b><br>${gradeEsc(NS.label || GRADE_TYPE_LABEL[NS.type])} · ${gradeFmtLimit(NS.limit)} 안에 ${Math.ceil(NS.count * NS.passPct / 100)}개`
+    : `<b>${T.label} 1급까지 모두 합격!</b> 정말 대단해!`;
+  const ov = document.createElement('div'); ov.id = 'gx-cele';
+  ov.innerHTML = `<div class="gc-box"><div class="gc-medal">🏅</div>
+    <div class="gc-t">🎉 ${T.label} ${grade}급 합격!</div>
+    <div class="gc-s">서로 다른 날 ${S.need}번 합격해서 급이 올랐어!</div>
+    <div class="gc-next">${nextHtml}</div>
+    <button class="gx-btn" id="gx-cele-ok">좋아! ▶</button></div>`;
+  ['touchstart', 'touchmove'].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation(), { passive: true }));
+  document.body.appendChild(ov);
+  ov.querySelector('#gx-cele-ok').onclick = () => ov.remove();         // 닫으면 결과 화면(점수·시간·틀린 문제)
+  try { playFanfare(); } catch(e){}
+  try { flashConfetti(); const c = document.body.lastElementChild; if (c && c.id !== 'gx-cele') c.style.zIndex = '10003'; } catch(e){}
 }
