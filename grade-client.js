@@ -90,7 +90,7 @@ function gradeHeaders(){ return { 'apikey': GATE_SUPABASE_ANON_KEY, 'Authorizati
 
 // ── 상태 (서버 사본) ──
 //   { achieved: { track: { grade: achieved_at } }, progress: { track: { grade: {days, tries, best_ms, last_date, localDays:[날짜..]} } } }
-function gradeEmpty(){ return { achieved: {}, progress: {} }; }
+function gradeEmpty(){ return { achieved: {}, progress: {}, jumps: {} }; }
 function gradeCacheKey(sid){ return 'gradeCache_' + sid; }
 function gradeState(){
   const sid = gradeSid(); if (!sid) return gradeEmpty();
@@ -102,6 +102,8 @@ function gradeFromServer(js){
   (js && js.achieved || []).forEach(a => { (st.achieved[a.track] = st.achieved[a.track] || {})[a.grade] = a.achieved_at || true; });
   (js && js.progress || []).forEach(p => { (st.progress[p.track] = st.progress[p.track] || {})[p.grade] =
     { days: p.days || 0, tries: p.tries || 0, best_ms: p.best_ms == null ? null : p.best_ms, last_date: p.last_date || null, last_pass_date: p.last_pass_date || null }; });
+  st.jumps = {};
+  (js && js.jumps || []).forEach(j => { st.jumps[j.track] = { last: j.last_jump_date || null, lock: j.lock_grade == null ? null : j.lock_grade }; });
   return st;
 }
 
@@ -119,6 +121,29 @@ function gradeNext(track){
   const cur = gradeCurrent(track);
   if (cur == null) return first;
   return cur > 1 ? cur - 1 : null;
+}
+// ── 월반 도전 (2026-11-11) ── 바로 다음 급보다 위 급을 "처음" 도전 → 제한 시간 안 90점이면 그 급+아래 급 합격
+//   트랙마다 하루 1번 · 80점 미만이면 그 급과 그 위 잠김(아무 급이나 정상 승급하면 풀림) · 80~89점은 보통 합격 1번
+function gradeFirst(track){ const T = GRADE_TRACKS[track]; return T ? Math.max(...Object.keys(T.grades).map(Number)) : null; }
+function gradeJumpInfo(track){
+  const j = (gradeState().jumps || {})[track] || {};
+  return { usedToday: j.last === gradeToday(), lock: j.lock == null ? null : j.lock };
+}
+function gradeMarkJumpUsed(track){ const st = gradeState(); const J = ((st.jumps = st.jumps || {})[track] = st.jumps[track] || { last: null, lock: null }); J.last = gradeToday(); gradeSaveState(st); }
+// 고를 수 있는 급과 상태: 'next'(바로 다음) / 'jump'(월반 도전 가능) / 'retry'(월반 때 80점대 받은 급 — 보통 판) / 'locked' / 'used'(오늘 월반 이미)
+function gradeChoiceState(track, g){
+  const nx = gradeNext(track); if (nx == null || g > nx) return null;
+  if (g === nx) return 'next';
+  const J = gradeJumpInfo(track);
+  if (J.lock != null && g <= J.lock) return 'locked';
+  if ((gradeProgress(track, g).tries || 0) > 0) return 'retry';
+  return J.usedToday ? 'used' : 'jump';
+}
+const gradeSel = {};   // 카드에서 고른 급 (화면 안에서만)
+function gradeSelected(track){
+  const nx = gradeNext(track); const g = gradeSel[track];
+  const st = g != null ? gradeChoiceState(track, g) : null;
+  return (st && st !== 'locked' && st !== 'used') ? g : nx;
 }
 function gradeSpec(track, grade){ const T = GRADE_TRACKS[track]; return T ? T.grades[grade] || null : null; }
 function gradeProgress(track, grade){ return ((gradeState().progress[track] || {})[grade]) || { days: 0, tries: 0, best_ms: null, last_date: null }; }
@@ -147,7 +172,12 @@ function gradeLoad(){
     await gradeFlushPending();
     try {
       const res = await fetch(`${GATE_SUPABASE_URL}/rest/v1/rpc/grade_status`, { method: 'POST', headers: gradeHeaders(), body: JSON.stringify({ p_student_id: sid }) });
-      if (res.ok){ const st = gradeFromServer(await res.json()); gradeMergePendingInto(st); gradeSaveState(st); }
+      if (res.ok){
+        const old = gradeState(), st = gradeFromServer(await res.json()); gradeMergePendingInto(st);
+        // 월반 기회를 이 기기에서 오늘 이미 썼으면(중간에 나간 판 포함) 그대로 유지
+        Object.keys(old.jumps || {}).forEach(t => { const o = old.jumps[t]; if (o && o.last === gradeToday()){ st.jumps[t] = Object.assign({ lock: null }, st.jumps[t] || {}, { last: o.last }); } });
+        gradeSaveState(st);
+      }
     } catch(e){ /* 오프라인 — 기기 사본 그대로 */ }
     gradeLoading = null;
     return gradeState();
@@ -162,9 +192,10 @@ async function gradeSend(sid, rec){
   const res = await fetch(`${GATE_SUPABASE_URL}/rest/v1/rpc/grade_record`, { method: 'POST', headers: gradeHeaders(), body: JSON.stringify({
     p_student_id: sid, p_track: rec.track, p_grade: rec.grade, p_score: rec.score, p_total: rec.total,
     p_elapsed_ms: Math.round(rec.elapsedMs), p_limit_ms: S.limit * 1000, p_pass_pct: S.passPct, p_need: S.need,
-    p_local_date: rec.date }) });
+    p_local_date: rec.date, ...(rec.jump ? { p_jump: true, p_first_grade: gradeFirst(rec.track) } : {}) }) });
   if (!res.ok) throw new Error('grade_record ' + res.status);
   const js = await res.json();
+  if (js && js.error === 'jump_limit'){ const e = new Error('jump_limit'); e.jumpLimit = true; throw e; }
   if (!js || js.ok === false) throw new Error('grade_record ' + (js && js.error));
   return js;
 }
@@ -172,7 +203,7 @@ async function gradeFlushPending(){
   const sid = gradeSid(); if (!sid) return;
   const list = gradePendingList(sid); if (!list.length) return;
   const left = [];
-  for (const rec of list){ try { await gradeSend(sid, rec); } catch(e){ left.push(rec); } }
+  for (const rec of list){ try { await gradeSend(sid, rec); } catch(e){ if (!e.jumpLimit) left.push(rec); } }   // 하루 1번을 넘은 월반 기록은 버림
   gradePendingSave(sid, left);
 }
 // 못 보낸 기록도 기기 화면에는 반영 (합격한 날 수 계산)
@@ -184,24 +215,35 @@ function gradeApplyLocal(st, rec, date){
   const S = gradeSpec(rec.track, rec.grade); if (!S) return { days: 0, promoted: false };
   const P = ((st.progress[rec.track] = st.progress[rec.track] || {})[rec.grade] =
     st.progress[rec.track][rec.grade] || { days: 0, tries: 0, best_ms: null, last_date: null });
+  const firstTry = !P.tries;
   P.tries++;
   const passed = rec.score * 100 >= S.passPct * rec.total && rec.elapsedMs <= S.limit * 1000;
+  if (rec.jump && firstTry){
+    const J = ((st.jumps = st.jumps || {})[rec.track] = st.jumps[rec.track] || { last: null, lock: null }); J.last = date;
+    if (rec.score * 100 >= 90 * rec.total && rec.elapsedMs <= S.limit * 1000){
+      const A = (st.achieved[rec.track] = st.achieved[rec.track] || {}); const had = !!A[rec.grade];
+      for (let g = rec.grade; g <= gradeFirst(rec.track); g++) if (!A[g]) A[g] = new Date().toISOString();
+      J.lock = null; if (passed && P.last_pass_date !== date){ P.days++; P.last_pass_date = date; } P.last_date = date;
+      return { passed: true, days: P.days, promoted: !had, jump_pass: true };
+    }
+    if (!passed) J.lock = rec.grade;
+  }
   if (rec.score * 100 >= S.passPct * rec.total && (P.best_ms == null || rec.elapsedMs < P.best_ms)) P.best_ms = Math.round(rec.elapsedMs);
   // 같은 날 두 번째 합격은 세지 않음 ("서로 다른 날")
   if (passed && P.last_pass_date !== date){ P.days++; P.last_pass_date = date; }
   P.last_date = date;
   const A = (st.achieved[rec.track] = st.achieved[rec.track] || {});
   let promoted = false;
-  if (!A[rec.grade] && P.days >= S.need){ A[rec.grade] = new Date().toISOString(); promoted = true; }
+  if (!A[rec.grade] && P.days >= S.need){ A[rec.grade] = new Date().toISOString(); promoted = true; if (st.jumps && st.jumps[rec.track]) st.jumps[rec.track].lock = null; }
   return { passed, days: P.days, promoted };
 }
 
 // 시험 한 판(끝까지 푼 판)을 기록 → { passed, days, need, promoted, achieved, offline }
 //   서버가 되면 서버 판정, 안 되면 기기에서 같은 규칙으로 판정하고 기록은 나중에 다시 보냄
-async function gradeRecord(track, grade, score, total, elapsedMs){
+async function gradeRecord(track, grade, score, total, elapsedMs, jump){
   const sid = gradeSid(); const S = gradeSpec(track, grade);
   if (!sid || !S) return null;
-  const rec = { track, grade, score, total, elapsedMs, date: gradeToday() };
+  const rec = { track, grade, score, total, elapsedMs, date: gradeToday(), jump: !!jump };
   const prevBest = gradeProgress(track, grade).best_ms;
   try {
     const js = await gradeSend(sid, rec);
@@ -211,12 +253,20 @@ async function gradeRecord(track, grade, score, total, elapsedMs){
     if (js.passed) P.last_pass_date = js.local_date || rec.date;
     if (score * 100 >= S.passPct * total && (P.best_ms == null || elapsedMs < P.best_ms)) P.best_ms = Math.round(elapsedMs);
     if (js.achieved){ (st.achieved[track] = st.achieved[track] || {})[grade] = st.achieved[track][grade] || new Date().toISOString(); }
+    const J = ((st.jumps = st.jumps || {})[track] = st.jumps[track] || { last: null, lock: null });
+    if (js.jump) J.last = js.local_date || rec.date;
+    if (js.jump_pass){ const A = st.achieved[track] = st.achieved[track] || {}; for (let g = grade; g <= gradeFirst(track); g++) if (!A[g]) A[g] = new Date().toISOString(); }
+    if (js.jump_locked) J.lock = grade;
+    if (js.promoted || js.jump_pass) J.lock = null;
     gradeSaveState(st);
     return Object.assign({ offline: false, prevBest }, js);
   } catch(e){
+    if (e.jumpLimit) return { error: 'jump_limit', passed: false, days: gradeProgress(track, grade).days || 0, need: S.need, promoted: false, prevBest, jump: false };
     const list = gradePendingList(sid); list.push(rec); gradePendingSave(sid, list);
     const st = gradeState(); const r = gradeApplyLocal(st, rec, rec.date); gradeSaveState(st);
-    return { offline: true, passed: r.passed, days: r.days, need: S.need, promoted: r.promoted, achieved: !!(st.achieved[track] || {})[grade], prevBest };
+    const J = (st.jumps || {})[track] || {};
+    return { offline: true, passed: r.passed, days: r.days, need: S.need, promoted: r.promoted, achieved: !!(st.achieved[track] || {})[grade], prevBest,
+             jump: !!rec.jump, jump_pass: !!r.jump_pass, jump_locked: !!rec.jump && J.lock === grade };
   }
 }
 
@@ -268,6 +318,14 @@ function gradeInjectCss(){
 #scr-grade .gc-go{margin-top:10px;width:100%;font-family:inherit;font-size:16px;font-weight:800;padding:10px;border-radius:12px;border:none;cursor:pointer;
  background:linear-gradient(180deg,#FFD36A,#D89838);color:#2a1600;}
 #scr-grade .gc-go:disabled{background:rgba(255,255,255,.12);color:rgba(255,232,160,.55);cursor:default;}
+#scr-grade .gc-chips{display:flex;gap:6px;overflow-x:auto;padding:8px 2px 2px;touch-action:pan-x;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+#scr-grade .gc-chips::-webkit-scrollbar{display:none;}
+#scr-grade .gc-chip{flex:0 0 auto;font-family:inherit;font-size:14px;font-weight:800;padding:6px 11px;border-radius:16px;border:1.5px solid rgba(255,217,138,.35);background:rgba(0,0,0,.3);color:#FFE9C2;}
+#scr-grade .gc-chip.jump{border-style:dashed;color:#FFC98A;}
+#scr-grade .gc-chip.retry{color:#FFE9C2;}
+#scr-grade .gc-chip.locked,#scr-grade .gc-chip.used{opacity:.4;}
+#scr-grade .gc-chip.sel{background:linear-gradient(180deg,#FFD36A,#D89838);color:#2a1600;border-color:#FFD36A;border-style:solid;}
+#scr-grade .gc-next.gc-jump{border-color:rgba(255,201,138,.7);border-style:dashed;}
 #scr-grade .gc-done{margin-top:10px;font-size:15px;font-weight:800;color:#7EE2A0;}`;
   document.head.appendChild(st);
 }
@@ -293,29 +351,57 @@ function gradeCardHtml(track){
   let h = `<div class="grade-card" data-track="${track}"><div class="gc-top"><div class="gc-name">${gradeEsc(T.label)}</div>`
         + (cur == null ? `<div class="gc-mine none">아직 급 없음</div>` : `<div class="gc-mine">내 급 ${cur}급</div>`) + `</div>`;
   if (nx == null){ return h + `<div class="gc-done">🎉 1급까지 모두 합격했어!</div></div>`; }
-  const S = gradeSpec(track, nx), P = gradeProgress(track, nx);
-  const need = Math.ceil(S.count * S.passPct / 100);
+  const sel = gradeSelected(track), selSt = gradeChoiceState(track, sel), J = gradeJumpInfo(track);
+  // 급 게이지 (가로 스크롤) — 바로 다음 급부터 1급까지
+  const chips = [];
+  for (let g = nx; g >= 1; g--){
+    const st = gradeChoiceState(track, g);
+    const icon = st === 'locked' ? '🔒' : st === 'used' ? '⏳' : st === 'jump' ? '⏭' : '';
+    chips.push(`<button class="gc-chip ${st}${g === sel ? ' sel' : ''}" ${st === 'locked' || st === 'used' ? 'disabled' : ''} onclick="gradePick('${track}',${g})">${icon}${g}급</button>`);
+  }
+  h += `<div class="gc-chips">${chips.join('')}</div>`;
+  const S = gradeSpec(track, sel), P = gradeProgress(track, sel);
+  const need = Math.ceil(S.count * S.passPct / 100), need90 = Math.ceil(S.count * 0.9);
   const days = Math.min(P.days || 0, S.need);
   const dots = Array.from({ length: S.need }, (_, i) => `<span class="gc-dot${i < days ? ' on' : ''}"></span>`).join('');
   const passedToday = P.last_pass_date && P.last_pass_date === gradeToday();
-  h += `<div class="gc-next"><div class="gc-goal">🎯 ${nx}급 도전</div>`
-     + `<div class="gc-rule">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type] || S.type)} · ${S.count}문제 · ${gradeFmtLimit(S.limit)} 안에 ${need}개 이상 맞히면 합격</div>`
-     + `<div class="gc-prog">합격 ${days}/${S.need} ${dots} <span class="gc-sub">(서로 다른 날)</span></div>`;
-  if (P.best_ms != null) h += `<div class="gc-sub" style="margin-top:4px">내 최고 기록 ${gradeFmtTime(P.best_ms)}</div>`;
-  if (passedToday) h += `<div class="gc-sub" style="margin-top:4px;color:#7EE2A0">오늘 합격했어! 다른 날 한 번 더 합격하면 돼</div>`;
-  h += `</div>`;
-  const rec = gradeRecommendUnmet(track, nx);
+  if (selSt === 'jump'){
+    h += `<div class="gc-next gc-jump"><div class="gc-goal">⏭ ${sel}급 월반 도전</div>`
+       + `<div class="gc-rule">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type] || S.type)} · ${S.count}문제 · <b>${gradeFmtLimit(S.limit)}</b> (시간이 되면 끝)</div>`
+       + `<div class="gc-rule">첫 판에 <b>${need90}개 이상</b>이면 바로 ${sel}급! (아래 급도 모두 합격)<br>${need}~${need90 - 1}개면 합격 1번 · ${need}개 미만이면 ${sel}급 위는 잠겨요</div>`
+       + `<div class="gc-sub" style="margin-top:4px">월반 도전은 하루에 한 번</div></div>`;
+  } else {
+    h += `<div class="gc-next"><div class="gc-goal">🎯 ${sel}급 도전</div>`
+       + `<div class="gc-rule">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type] || S.type)} · ${S.count}문제 · ${gradeFmtLimit(S.limit)} 안에 ${need}개 이상 맞히면 합격</div>`
+       + `<div class="gc-prog">합격 ${days}/${S.need} ${dots} <span class="gc-sub">(서로 다른 날)</span></div>`;
+    if (P.best_ms != null) h += `<div class="gc-sub" style="margin-top:4px">내 최고 기록 ${gradeFmtTime(P.best_ms)}</div>`;
+    if (passedToday) h += `<div class="gc-sub" style="margin-top:4px;color:#7EE2A0">오늘 합격했어! 다른 날 한 번 더 합격하면 돼</div>`;
+    h += `</div>`;
+  }
+  if (J.lock != null) h += `<div class="gc-sub" style="margin-top:6px">🔒 ${J.lock}급 위는 잠겨 있어 — 아래 급을 하나 합격하면 다시 월반할 수 있어</div>`;
+  else if (J.usedToday) h += `<div class="gc-sub" style="margin-top:6px">⏳ 오늘 월반 도전은 했어 — 내일 다시!</div>`;
+  const rec = gradeRecommendUnmet(track, sel);
   if (rec) h += `<div class="gc-rec">💡 ${gradeEsc(rec.label)}을 먼저 합격하면 더 쉬워요 (그래도 도전할 수 있어)</div>`;
   h += (typeof gxSupported === 'function' && gxSupported(S))
-    ? `<button class="gc-go" onclick="gxIntro('${track}')">도전 ▶</button></div>`
+    ? `<button class="gc-go" onclick="gxIntro('${track}',${sel})">${selSt === 'jump' ? '월반 도전 ▶' : '도전 ▶'}</button></div>`
     : `<button class="gc-go" disabled>도전 ▶ (곧 열려요)</button></div>`;
   return h;
+}
+function gradePick(track, g){
+  try { playTick(); } catch(e){}
+  gradeSel[track] = g;
+  const list = document.getElementById('grade-list'); const y = list ? list.scrollTop : 0;
+  const card = document.querySelector(`.grade-card[data-track="${track}"]`);
+  const chipsX = card && card.querySelector('.gc-chips') ? card.querySelector('.gc-chips').scrollLeft : 0;
+  if (card){ const tmp = document.createElement('div'); tmp.innerHTML = gradeCardHtml(track); card.replaceWith(tmp.firstElementChild); }
+  const nc = document.querySelector(`.grade-card[data-track="${track}"] .gc-chips`); if (nc) nc.scrollLeft = chipsX;
+  if (list) list.scrollTop = y;
 }
 
 function gradeRenderScreen(){
   const list = document.getElementById('grade-list'); if (!list) return;
   gsInjectCss();
-  let h = `<button class="gs-open" onclick="openGradeStatus()">📋 내 급수 현황</button><div class="grade-intro">바로 다음 급에 도전할 수 있어. 서로 다른 날 정해진 횟수(보통 2번)만큼 합격하면 급이 올라가! 한 번 딴 급은 그대로 남아.</div>`;
+  let h = `<button class="gs-open" onclick="openGradeStatus()">📋 내 급수 현황</button><div class="grade-intro">서로 다른 날 정해진 횟수(보통 2번)만큼 합격하면 급이 올라가! 한 번 딴 급은 그대로 남아. ⏭ 위 급을 골라 월반 도전도 할 수 있어 (하루 한 번).</div>`;
   h += Object.keys(GRADE_TRACKS).map(gradeCardHtml).join('');
   list.innerHTML = h;
 }
@@ -406,6 +492,14 @@ function gradeHomeWatch(){
   }, 1000);
 })();
 
+// 급 게이지(가로) — 손가락으로 옆으로 밀기: 직접 scrollLeft 이동 (앱 전체 touchmove가 기본 스크롤을 막아서)
+(function(){
+  let sx = 0, sl = 0, el = null, moved = false, eatClick = false;
+  document.addEventListener('touchstart', e => { el = e.target.closest && e.target.closest('.gc-chips'); moved = false; if (!el) return; sx = e.touches[0].clientX; sl = el.scrollLeft; }, { passive: true, capture: true });
+  document.addEventListener('touchmove', e => { if (!el) return; const dx = sx - e.touches[0].clientX; if (Math.abs(dx) > 8) moved = true; el.scrollLeft = sl + dx; }, { passive: true, capture: true });
+  document.addEventListener('touchend', () => { if (el && moved){ eatClick = true; setTimeout(() => { eatClick = false; }, 400); } el = null; }, { passive: true, capture: true });
+  document.addEventListener('click', e => { if (eatClick && e.target.closest && e.target.closest('.gc-chips')){ e.preventDefault(); e.stopPropagation(); eatClick = false; } }, true);   // 옆으로 민 뒤 손 뗄 때 급이 눌리지 않게
+})();
 // 급수 도전 화면 터치 스크롤 — 앱 전체 touchmove가 기본 스크롤을 막아서(주판 조작용) mult-list와 같은 방식으로 직접 스크롤 (2026-11-10)
 (function(){
   let startY = 0, startScroll = 0;
@@ -644,30 +738,43 @@ function gxEnsureScreen(){
 }
 
 // ── 시작 안내 ──
-function gxIntro(track){
-  const grade = gradeNext(track), S = gradeSpec(track, grade);
-  if (!gxSupported(S) || !gxEnsureScreen()) return;
+function gxIntro(track, pick){
+  const grade = pick != null ? pick : gradeNext(track), S = gradeSpec(track, grade);
+  const cs = gradeChoiceState(track, grade);
+  if (!cs || cs === 'locked' || cs === 'used' || !gxSupported(S) || !gxEnsureScreen()) return;
+  const jump = cs === 'jump';
   try { playTick(); } catch(e){}
-  const T = GRADE_TRACKS[track], need = Math.ceil(S.count * S.passPct / 100);
-  document.getElementById('gx-title').textContent = `🏅 ${T.label} ${grade}급 도전`;
+  const T = GRADE_TRACKS[track], need = Math.ceil(S.count * S.passPct / 100), need90 = Math.ceil(S.count * 0.9);
+  const how = GX_KEYPAD_ONLY[S.type] ? '외운 구구단으로 바로 답을 써. 빠르게!' : T.mode === 'soroban' ? '주판으로 계산하고 아래 숫자 키로 답을 써.' : '머릿속으로 계산해서 답을 써.';
+  document.getElementById('gx-title').textContent = `🏅 ${T.label} ${grade}급 ${jump ? '월반 도전' : '도전'}`;
   document.getElementById('gx-timer-m').textContent = '';
-  document.getElementById('gx-body').innerHTML = `<div class="gx-card">
+  document.getElementById('gx-body').innerHTML = jump ? `<div class="gx-card">
+    <div class="gx-h">⏭ ${T.label} ${grade}급 월반 도전</div>
+    <div class="gx-p">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type])} · ${S.count}문제<br>
+      <b>${gradeFmtLimit(S.limit)}</b>이 되면 시험이 끝나!<br>
+      🏅 <b>${need90}개 이상</b> → 바로 ${grade}급 (아래 급도 모두 합격)<br>
+      ✅ ${need}~${need90 - 1}개 → 합격 1번 (다른 날 한 번 더)<br>
+      🔒 ${need}개 미만 → ${grade}급 위는 잠겨 (아래 급을 하나 합격하면 풀려)<br>
+      <small>${how}<br>월반 도전은 하루에 한 번. 중간에 나가도 오늘 기회는 써.</small></div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+      <button class="gx-btn sub" id="gx-cancel">다음에</button><button class="gx-btn" id="gx-go">월반 도전 ▶</button></div></div>` : `<div class="gx-card">
     <div class="gx-h">🎯 ${T.label} ${grade}급</div>
     <div class="gx-p">${gradeEsc(S.label || GRADE_TYPE_LABEL[S.type])} · ${S.count}문제<br>
       <b>${gradeFmtLimit(S.limit)}</b> 안에 <b>${need}개 이상</b> 맞히면 합격!<br>
-      <small>${GX_KEYPAD_ONLY[S.type] ? '외운 구구단으로 바로 답을 써. 빠르게!' : T.mode === 'soroban' ? '주판으로 계산하고 ✏️ 칸을 눌러 답을 써.' : '머릿속으로 계산해서 답을 써.'}<br>
+      <small>${how}<br>
       문제마다 맞았는지는 끝나고 알려줄게. 중간에 나가면 이번 판은 무효야.</small></div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
       <button class="gx-btn sub" id="gx-cancel">다음에</button><button class="gx-btn" id="gx-go">시작 ▶</button></div></div>`;
   document.getElementById('gx-cancel').onclick = () => openGradeHome();
-  document.getElementById('gx-go').onclick = () => gxStart(track, grade);
+  document.getElementById('gx-go').onclick = () => gxStart(track, grade, jump);
   lrnShowScreen('scr-gexam');
 }
 
 // ── 시험 ──
-function gxStart(track, grade){
+function gxStart(track, grade, jump){
   const S = gradeSpec(track, grade); if (!gxSupported(S)) return;
-  Object.assign(GX, { on: true, track, grade, spec: S, mode: GX_KEYPAD_ONLY[S.type] ? 'mental' : GRADE_TRACKS[track].mode, qs: gxGen(S), idx: 0, answers: [], input: '' });
+  if (jump) gradeMarkJumpUsed(track);                       // 월반 기회는 시작하면 씀 (중간에 나가도)
+  Object.assign(GX, { on: true, track, grade, spec: S, jump: !!jump, mode: GX_KEYPAD_ONLY[S.type] ? 'mental' : GRADE_TRACKS[track].mode, qs: gxGen(S), idx: 0, answers: [], input: '' });
   GX.start = Date.now();
   clearInterval(GX.timer); GX.timer = setInterval(gxTick, 250);
   if (GX.mode === 'soroban'){
@@ -693,8 +800,20 @@ function gxStart(track, grade){
 function gxTick(){
   if (!GX.on) return;
   const left = GX.spec.limit * 1000 - (Date.now() - GX.start);
+  if (GX.jump && left <= 0) return gxTimeUp();                 // 월반 도전은 시간이 되면 끝
   const txt = left >= 0 ? `⏱ ${gradeFmtTime(Math.ceil(left / 1000) * 1000)}` : `⏱ +${gradeFmtTime(-left)}`;
   document.querySelectorAll('.gx-timer').forEach(el => { el.textContent = txt; el.classList.toggle('over', left < 0); });
+}
+function gxTimeUp(){
+  if (!GX.on) return;
+  while (GX.answers.length < GX.qs.length){               // 남은 문제는 빈칸(틀림)
+    const q = GX.qs[GX.answers.length];
+    const v = GX.answers.length === GX.idx && GX.input !== '' ? parseInt(GX.input, 10) : null;   // 쓰던 답은 인정
+    if (q.hasR) GX.answers.push({ q, v: GX.stage === 'r' ? GX.qv : v, rv: GX.stage === 'r' ? v : null, ok: false });
+    else GX.answers.push({ q, v, ok: v === q.ans });
+  }
+  GX.idx = GX.qs.length; GX.timeUp = true;
+  gxFinish();
 }
 function gxBlankHtml(){ const tap = false; return `<span class="gx-blank${GX.input ? '' : ' empty'}${tap ? ' gx-tap' : ''}" id="gx-blank">${GX.input || (GX.mode === 'soroban' ? '?' : '✏️')}</span>`; }
 function gxShow(){
@@ -839,8 +958,9 @@ function gxCleanup(){
 
 // ── 끝 ──
 async function gxFinish(){
-  const elapsed = Date.now() - GX.start;
-  const { track, grade, spec: S, answers } = GX;
+  const { track, grade, spec: S, answers, jump } = GX;
+  const elapsed = jump ? Math.min(Date.now() - GX.start, S.limit * 1000) : Date.now() - GX.start;
+  const fromGrade = gradeCurrent(track);
   const score = answers.filter(x => x.ok).length, total = answers.length;
   const need = Math.ceil(total * S.passPct / 100);
   const prevDays = gradeProgress(track, grade).days || 0;
@@ -851,11 +971,18 @@ async function gxFinish(){
   document.getElementById('gx-body').innerHTML = `<div class="gx-card"><div class="gx-p">채점하는 중…</div></div>`;
   lrnShowScreen('scr-gexam');
   let r = null;
-  try { r = await gradeRecord(track, grade, score, total, elapsed); } catch(e){}
+  try { r = await gradeRecord(track, grade, score, total, elapsed, jump); } catch(e){}
+  const GX_lastTimeUp = !!GX.timeUp; GX.jump = false; GX.timeUp = false;
   const passed = r ? !!r.passed : gradeJudge(track, grade, score, total, elapsed);
   const scoreOk = score >= need, timeOk = elapsed <= S.limit * 1000;
   let head, msg;
-  if (passed){
+  const need90 = Math.ceil(total * 0.9);
+  if (jump && r && r.jump !== false){
+    if (r.jump_pass){ head = `<div class="gx-big pass">⏭ 월반 성공!</div>`; msg = `🎉 <b>${grade}급</b>이 됐어!${fromGrade != null ? ` (${fromGrade}급 → ${grade}급)` : ''} 다음은 ${grade > 1 ? (grade - 1) + '급 도전!' : '모든 급 완료!'}`; }
+    else if (r.passed){ head = `<div class="gx-big pass">✅ 합격 1번!</div>`; msg = `${need90}개에 ${need90 - score}개 모자라서 바로 월반은 못 했지만, <b>다른 날</b> 한 번 더 ${need}개 이상이면 ${grade}급! (합격 ${r.days}/${r.need || S.need})`; }
+    else { head = `<div class="gx-big fail">아쉬워! 이번엔 월반 실패</div>`; msg = `🔒 ${grade}급 위는 잠겼어. 아래 급을 하나 합격하면 다시 월반할 수 있어!`; }
+    if (GX_lastTimeUp) msg += `<br><small>⏱ 시간이 되어 끝났어</small>`;
+  } else if (passed){
     head = `<div class="gx-big pass">✅ 합격!</div>`;
     if (r && r.promoted) msg = `🎉 <b>${grade}급</b>이 됐어! 다음은 ${grade > 1 ? (grade - 1) + '급 도전!' : '모든 급 완료!'}`;
     else if (r && r.days === prevDays) msg = `오늘은 이미 합격했어. <b>다른 날</b> 한 번 더 합격하면 돼! (합격 ${r.days}/${r.need || S.need})`;
@@ -877,7 +1004,7 @@ async function gxFinish(){
     ${faster}${r && r.offline ? '<br><small>인터넷이 연결되면 기록을 보낼게.</small>' : ''}</div>${wrongHtml}
     <div style="text-align:center;margin-top:14px"><button class="gx-btn" id="gx-done">확인</button></div></div>`;
   document.getElementById('gx-done').onclick = () => openGradeHome();
-  if (passed && r && r.promoted) gxCelebrate(track, grade);          // 4단계: 급이 오른 순간 축하
+  if (r && (r.promoted || r.jump_pass)) gxCelebrate(track, grade, r.jump_pass ? fromGrade : undefined);          // 4단계: 급이 오른 순간 축하
   else { try { (passed ? playDing : playTick)(); } catch(e){} }
 }
 
@@ -977,7 +1104,7 @@ function openGradeStatus(){
 // ════════════════════════════════════════════════════════════
 // 4단계 (2026-11-11) — 승급 축하 화면: 메달 · 팡파르 · 색종이 · "다음 도전" 안내 (급수증은 보류)
 // ════════════════════════════════════════════════════════════
-function gxCelebrate(track, grade){
+function gxCelebrate(track, grade, fromGrade){
   gxInjectCss();
   if (!document.getElementById('gx-cele-css')){
     const st = document.createElement('style'); st.id = 'gx-cele-css';
@@ -1003,7 +1130,7 @@ function gxCelebrate(track, grade){
   const ov = document.createElement('div'); ov.id = 'gx-cele';
   ov.innerHTML = `<div class="gc-box"><div class="gc-medal">🏅</div>
     <div class="gc-t">🎉 ${T.label} ${grade}급 합격!</div>
-    <div class="gc-s">서로 다른 날 ${S.need}번 합격해서 급이 올랐어!</div>
+    <div class="gc-s">${fromGrade !== undefined ? `⏭ 월반 성공! ${fromGrade != null ? fromGrade + '급 → ' : ''}${grade}급으로 껑충!` : `서로 다른 날 ${S.need}번 합격해서 급이 올랐어!`}</div>
     <div class="gc-next">${nextHtml}</div>
     <button class="gx-btn" id="gx-cele-ok">좋아! ▶</button></div>`;
   ['touchstart', 'touchmove'].forEach(ev => ov.addEventListener(ev, e => e.stopPropagation(), { passive: true }));
