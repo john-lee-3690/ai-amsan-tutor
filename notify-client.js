@@ -337,8 +337,8 @@ function notifTaskDiv(){
 //   · 구구단: 단 순서 강제 없음 — "구구단 외우기"로 안내(외운 단은 단 테스트까지), 단 테스트 통과 n/8 표시
 //     8개 단 테스트 다 통과 → 전체 테스트(81)로 안내. 전체 테스트 통과(이전 방식 포함) = 구구단 완료
 //   · 완료 후: 최근 7일 안에 전체 테스트 통과 기록이 없으면 전체 테스트(확인) 안내 — 아이가 원하는 날
-//   · 초2(parallel)부터: 큰 수 구구(테스트 16개, 첫 미통과) → 곱셈 연습 단계(표 확정 후 — 주산·암산 트랙 분리)
-//   · 나눗셈은 곱셈 연습 주산 3×1 단계 통과 후부터 안내(표 확정 전까지는 안내 안 함). 나눗셈 잠금은 그대로
+//   · 초2(parallel)부터: 큰 수 구구(테스트 16개, 첫 미통과) → 곱셈 연습 = 곱셈 주산·암산 다음 급의 유형 (2026-11-11)
+//   · 나눗셈은 곱셈 주산 8급 합격부터, 나눗셈 다음 급에 맞는 단원 (2026-11-11). 나눗셈 잠금은 그대로
 //   · 초2 전(young): 덧뺄셈 초급 + 구구단(외우기·테스트·확인)만
 // ════════════════════════════════════════════════════════════
 const NOTIF_GUGU_DANS = [2,3,4,5,6,7,8,9];
@@ -402,15 +402,45 @@ function notifTaskBignum(){
 // 오늘 곱셈 줄: 구구단 미완료 → 구구단 / 확인 테스트 날 → 확인 / (초2부터) 큰 수 구구 → 곱셈 연습(표 확정 후)
 function notifTaskMult(parallel){
   const gugu = notifTaskGugu();
-  const r = { gugu, bignum: null, practice: { pending:true }, today: null };
+  const r = { gugu, bignum: null, practice: null, today: null };
   if (!gugu) return r;
   if (gugu.kind !== 'review'){ r.today = 'gugu'; return r; }
   if (gugu.due){ r.today = 'review'; }
   if (parallel){
     r.bignum = notifTaskBignum();
     if (!r.today && r.bignum && !r.bignum.done) r.today = 'bignum';
+    if (r.bignum && r.bignum.done){ r.practice = notifTaskMultPractice(); if (!r.today && r.practice) r.today = 'practice'; }
   }
   return r;
+}
+// 곱셈 연습 = 급수를 따라감 (2026-11-11 사용자 결정)
+//   곱셈 주산 다음 급의 유형을 연습 (13급 = 구구단 섞기 → 구구단 전체 테스트로 연습, 12~9 2×1, 8~5 3×1, 4~1 2×2)
+//   곱셈 암산은 주산보다 2급 아래를 유지 — 암산이 그보다 뒤처지면 암산 연습 (그 위 급을 이미 땄으면 그냥 인정)
+//   연습 끝 기준은 따로 없음: 급수 도전에서 그 급에 합격하면 다음 유형으로
+function notifTaskMultPractice(){
+  if (typeof gradeNext !== 'function') return null;
+  const sNext = gradeNext('mult_soroban'), sCur = gradeCurrent('mult_soroban');
+  const mNext = gradeNext('mult_mental'), mCur = gradeCurrent('mult_mental');
+  const pick = (track, g) => { const S = gradeSpec(track, g); return S ? { mode: track === 'mult_mental' ? 'mental' : 'soroban', type: S.type, grade: g, label: S.label || GRADE_TYPE_LABEL[S.type] || S.type } : null; };
+  if (sNext === 13) return pick('mult_soroban', 13);
+  const target = sCur != null ? sCur + 2 : null;                 // 암산이 있어야 할 급(주산보다 2급 아래)
+  if (target != null && target <= 12 && mNext != null && (mCur == null || mCur > target)) return pick('mult_mental', mNext);
+  if (sNext != null) return pick('mult_soroban', sNext);
+  if (mNext != null) return pick('mult_mental', mNext);
+  return { done:true };
+}
+// 나눗셈 = 곱셈 주산 8급부터, 나눗셈 다음 급에 맞는 단원 (14 곱셈구구 / 13 나머지 / 12~8 몫이 두자리 / 7~1 큰 수) — 기존 나눗셈 잠금 순서는 그대로 따름
+function notifTaskDivGrade(){
+  if (typeof gradeNext !== 'function' || typeof DIV_GATE_ORDER === 'undefined') return null;
+  const mc = gradeCurrent('mult_soroban'); if (mc == null || mc > 8) return null;
+  const g = gradeNext('div'); if (g == null) return { done:true };
+  let mode = g === 14 ? 'basic' : g === 13 ? 'remainder' : g >= 8 ? 'twodigit' : 'big';
+  try {
+    const need = divGateFirstUnmet(mode);
+    if (need && need.kind !== 'div') return null;                  // 구구단 먼저 (나눗셈 잠금 규칙)
+    if (need && need.kind === 'div') mode = need.mode;              // 앞 단원이 잠겨 있으면 그 단원부터
+  } catch(e){}
+  return { mode, name: divGateName(mode), grade: g };
 }
 
 function notifComputeTask(){
@@ -418,9 +448,9 @@ function notifComputeTask(){
   const parallel = age === 'parallel';
   const add = notifTaskAdd();
   const mult = notifTaskMult(parallel);
-  const div = parallel ? notifTaskDiv() : null;
-  // 두 번째 과목: 곱셈(구구단은 나이 무관). 나눗셈은 곱셈 연습 주산 3×1 통과 후부터 번갈아 — 표 확정 전까지 안내 안 함
-  const second = mult.today ? 'mult' : null;
+  const div = parallel ? notifTaskDivGrade() : null;
+  // 덧뺄셈·곱셈·나눗셈 모두 시간표에 (2026-11-11): 하루씩 번갈아가 아니라 차례대로, 못 한 것은 다음 시간으로 이월
+  const second = mult.today ? 'mult' : (div && div.mode ? 'div' : null);   // (예전 호환용)
   return { v:2, age, add, mult, div, second };
 }
 
@@ -516,7 +546,7 @@ function notifBuildDayItems(task){
         go:{ type:'stage', item: it } });
     });
   }
-  if (task && task.second === 'mult' && task.mult){
+  if (task && task.mult && task.mult.today){
     const M = task.mult, G = M.gugu;
     if (M.today === 'gugu' && G && G.kind === 'memorize'){
       items.push({ track:'mult', title:'구구단 외우기', sub:`외운 단은 단 테스트까지! · 통과 ${G.passed}/${G.total}`,
@@ -531,10 +561,19 @@ function notifBuildDayItems(task){
       const B = M.bignum, ol = (typeof MULT_GATE_ORDER_LABEL !== 'undefined' && MULT_GATE_ORDER_LABEL[B.order]) || '';
       items.push({ track:'mult', title:`큰 수의 구구 ${B.dan}단 테스트`, sub:`${ol} · 통과 ${B.passed}/${B.total}`,
         speak:'큰 수의 구구', go:{ type:'bignum', dan: B.dan } });
+    } else if (M.today === 'practice' && M.practice && !M.practice.done){
+      const Pr = M.practice;
+      if (Pr.type === 'gugu20'){
+        items.push({ track:'mult', title:'구구단 전체 테스트', sub:'곱셈 주산 13급을 향해!', speak:'구구단 전체 테스트', go:{ type:'gtest' } });
+      } else {
+        const nm = Pr.mode === 'mental' ? '곱셈 암산' : '곱셈 주산';
+        items.push({ track:'mult', title:`${nm} 연습 ·\u00A0${String(Pr.label).replace(/ /g, '\u00A0')}`, sub:`다음 급: ${nm} ${Pr.grade}급`,
+          speak:`${nm} 연습`, go:{ type:'mpractice', mode: Pr.mode, ptype: Pr.type } });
+      }
     }
   }
-  if (task && task.second === 'div' && task.div && !task.div.done && !task.div.needFirst){
-    items.push({ track:'div', title: task.div.name, sub: task.div.retry ? '다시 도전!' : '나눗셈 연습', speak: task.div.name, go:{ type:'div', mode: task.div.mode } });
+  if (task && task.div && task.div.mode){
+    items.push({ track:'div', title: task.div.name, sub: `다음 급: 나눗셈 ${task.div.grade}급`, speak: task.div.name, go:{ type:'div', mode: task.div.mode } });
   }
   return items;
 }
@@ -549,7 +588,7 @@ function notifPlayLoad(sid){
   let v = null;
   try { v = JSON.parse(localStorage.getItem(notifPlayKey(sid)) || 'null'); } catch(e){}
   if (!v || typeof v !== 'object') v = { last:null };
-  if (v.date !== notifLocalDate()){ v.date = notifLocalDate(); v.done = {}; v.opened = false; v.praise = false; }   // 새 날 = 덧뺄셈부터
+  if (v.date !== notifLocalDate()){ v.date = notifLocalDate(); v.opened = false; v.praise = false; }   // 새 날에도 바퀴는 이어감 — 어제 못 한 과목이 이번 시간 (2026-11-11)
   if (!v.done) v.done = {};
   return v;
 }
@@ -838,6 +877,15 @@ function notifGo(it){
       const sel = document.getElementById('app-dan-select');
       if (sel) sel.value = String(it.go.dan);
       openMultDanHub(it.go.dan);
+    }
+    else if (it.go.type === 'mpractice'){                                            // 곱셈 연습 칸으로 (곱셈 메뉴에서 그 칸 반짝)
+      lrnShowScreen('scr-mult');
+      setTimeout(() => {
+        const el = document.getElementById(`mult-${it.go.ptype}-wrap`);
+        if (!el) return;
+        try { el.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){}
+        el.classList.remove('addgate-flash'); void el.offsetWidth; el.classList.add('addgate-flash');
+      }, 120);
     }
     else if (it.go.type === 'div'){
       lrnShowScreen('scr-div');
